@@ -12,14 +12,21 @@ from cleanrl_utils.buffers import ReplayBuffer
 from sac import Args
 from sac import Actor
 from sac import SoftQNetwork
+import hockey.hockey_env as h_env
+import imageio
 
-def make_env(env_id, seed, idx, capture_video, run_name):
+def make_env(env_id, seed, idx, capture_video, run_name, env_mode="NORMAL"):
+    print(env_mode)
+    print(env_id)
     def thunk():
-        if capture_video and idx == 0:
-            env = gym.make(env_id, render_mode="rgb_array")
-            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+        if env_id == "Hockey-v0":
+            env = h_env.HockeyEnv(mode=h_env.Mode[env_mode])
         else:
-            env = gym.make(env_id)
+            if capture_video and idx == 0:
+                env = gym.make(env_id, render_mode="rgb_array")
+                env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+            else:
+                env = gym.make(env_id)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env.action_space.seed(seed)
         return env
@@ -58,7 +65,7 @@ if __name__ == "__main__":
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, args.seed + i, i, args.capture_video, run_name) for i in range(args.num_envs)]
+        [make_env(args.env_id, args.seed + i, i, args.capture_video, run_name, args.env_mode) for i in range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
@@ -96,6 +103,7 @@ if __name__ == "__main__":
 
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
+    frames = []
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
@@ -106,7 +114,8 @@ if __name__ == "__main__":
 
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
-
+        if global_step > 9:
+            frames.append(envs.envs[0].render(mode="human")) # why doesnt mode work, github looks like it should
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
             for info in infos["final_info"]:
@@ -194,6 +203,6 @@ if __name__ == "__main__":
                 )
                 if args.autotune:
                     writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
-
+    imageio.mimsave("hockey_run.mp4", frames, fps=30)
     envs.close()
     writer.close()

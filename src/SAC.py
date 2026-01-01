@@ -25,13 +25,19 @@ class Args:
     capture_video: bool = False
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
-    # Algorithm specific arguments
+    # Env specific arguments
     env_id: str = "Hopper-v4"
     """the environment id of the task"""
+    env_mode: str = "Normal"
+    """For Hockey env, Train or Playing Mode"""
+    weak_opponent: bool = True
+    """Opponent Difficulty"""
     total_timesteps: int = 1000000
     """total timesteps of the experiments"""
     num_envs: int = 1
     """the number of parallel game environments"""
+
+    #Algorithm specific arguments
     buffer_size: int = int(1e6)
     """the replay memory buffer size"""
     gamma: float = 0.99
