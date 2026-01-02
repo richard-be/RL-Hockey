@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import Any, NamedTuple
 
 @dataclass
 class Args:
@@ -61,6 +62,12 @@ class Args:
     autotune: bool = True
     """automatic tuning of the entropy coefficient"""
 
+class ReplayBufferSamples(NamedTuple):
+    observations: torch.Tensor
+    actions: torch.Tensor
+    next_observations: torch.Tensor
+    dones: torch.Tensor
+    rewards: torch.Tensor
 
 # ALGO LOGIC: initialize agent here:
 class SoftQNetwork(nn.Module):

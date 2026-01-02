@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
-from cleanrl_utils.buffers import ReplayBuffer
+from buffers import ReplayBuffer
 from sac import Args
 from sac import Actor
 from sac import SoftQNetwork
