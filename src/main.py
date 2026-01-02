@@ -16,8 +16,8 @@ import hockey.hockey_env as h_env
 import imageio
 
 def make_env(env_id, seed, idx, capture_video, run_name, env_mode="NORMAL"):
-    print(env_mode)
     print(env_id)
+    print(env_mode)
     def thunk():
         if env_id == "Hockey-v0":
             env = h_env.HockeyEnv(mode=h_env.Mode[env_mode])
@@ -114,8 +114,10 @@ if __name__ == "__main__":
 
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
-        if global_step > 9:
-            frames.append(envs.envs[0].render(mode="human")) # why doesnt mode work, github looks like it should
+        if global_step%1000 < 100:
+            frame = envs.envs[0].render()
+            if frame is not None:
+                frames.append(frame)
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
             for info in infos["final_info"]:
@@ -203,6 +205,5 @@ if __name__ == "__main__":
                 )
                 if args.autotune:
                     writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
-    imageio.mimsave("hockey_run.mp4", frames, fps=30)
     envs.close()
     writer.close()

@@ -25,8 +25,7 @@
 
 singularity exec \
   --nv \
-  --bind \
-    $PWD:/home/stud438/RL-Hockey/\
+  --bind $PWD:/workspace \
   $HOME/home/stud438/singularity/images/rl-hockey.simg \
-  python /home/stud438/RL-Hockey/src/main.py \
-    --env-id Hockey-v0 --env-mode TRAIN_DEFENSE --capture-video
+  python /workspace/src/main.py \
+    --env-id Hockey-v0 --env-mode TRAIN_DEFENSE --total-timesteps 10000 --num-envs 4
