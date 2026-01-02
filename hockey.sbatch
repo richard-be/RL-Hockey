@@ -19,13 +19,13 @@
 #SBATCH --mail-type=ALL
 # write a mail if a job begins, ends, fails, gets requeued or stages out
 # options: NONE, BEGIN, END, FAIL, REQUEUE, ALL
-#SBATCH --mail-user=richard.below@uni-tuebingen.de
+#SBATCH --mail-user=belowrichard@web.de
 # your email
 # here will be your commands for running the script
 
 singularity exec \
   --nv \
   --bind $PWD:/workspace \
-  $HOME/home/stud438/singularity/images/rl-hockey.simg \
-  python /workspace/src/main.py \
+  $HOME/singularity/images/rl_hockey.simg \
+  python3 /workspace/src/main.py \
     --env-id Hockey-v0 --env-mode TRAIN_DEFENSE --total-timesteps 10000 --num-envs 4
