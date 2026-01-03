@@ -8,10 +8,10 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
-from buffers import ReplayBuffer
-from sac import Args
-from sac import Actor
-from sac import SoftQNetwork
+from src.buffers import ReplayBuffer
+from src.sac import Args
+from src.sac import Actor
+from src.sac import SoftQNetwork
 import hockey.hockey_env as h_env
 import imageio
 
