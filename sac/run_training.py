@@ -21,7 +21,7 @@ def make_env(env_id, seed, idx, capture_video, run_name, env_mode="NORMAL"):
     print(env_mode)
     def thunk():
         if env_id == "Hockey-v0":
-            env = h_env.HockeyEnv(mode=h_env.Mode[env_mode])
+            env = h_env.HockeyEnv_BasicOpponent(mode=h_env.Mode[env_mode])
         else:
             if capture_video and idx == 0:
                 env = gym.make(env_id, render_mode="rgb_array")
