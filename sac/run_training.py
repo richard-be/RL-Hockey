@@ -12,7 +12,7 @@ from src.buffers import ReplayBuffer
 from src.sac import Args
 from src.sac import Actor
 from src.sac import SoftQNetwork
-import hockey.hockey_env as h_env
+import src.hockey_env as h_env
 import imageio
 
 def make_env(env_id, seed, idx, capture_video, run_name, env_mode="NORMAL"):

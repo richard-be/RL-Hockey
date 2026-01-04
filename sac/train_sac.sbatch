@@ -27,5 +27,5 @@ singularity exec \
   --nv \
   --bind $PWD:/workspace \
   $HOME/singularity/images/rl_hockey.simg \
-  python3 -m src.main \
+  python3 run_training.py \
     --env-id Hockey-v0 --env-mode NORMAL --total-timesteps 100000 --num-envs 4
