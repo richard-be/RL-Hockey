@@ -14,6 +14,7 @@ from src.sac import Actor
 from src.sac import SoftQNetwork
 import src.hockey_env as h_env
 import imageio
+import Box2D
 
 def make_env(env_id, seed, idx, capture_video, run_name, env_mode="NORMAL"):
     print(env_id)
@@ -34,6 +35,8 @@ def make_env(env_id, seed, idx, capture_video, run_name, env_mode="NORMAL"):
     return thunk
 
 if __name__ == "__main__":
+    print(f"Box2D version: {Box2D.__version__}")
+    print(f"Gymnasium version: {gym.__version__}")
 
     args = tyro.cli(Args)
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{args.env_mode}__{int(time.time())}"
