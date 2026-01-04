@@ -35,8 +35,6 @@ def make_env(env_id, seed, idx, capture_video, run_name, env_mode="NORMAL"):
     return thunk
 
 if __name__ == "__main__":
-    print(f"Box2D version: {Box2D.__version__}")
-    print(f"Gymnasium version: {gym.__version__}")
 
     args = tyro.cli(Args)
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{args.env_mode}__{int(time.time())}"
@@ -120,10 +118,6 @@ if __name__ == "__main__":
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
         
         # TRY NOT TO MODIFY: record rewards for plotting purposes
-        print(terminations)
-        for i in range(len(terminations)):
-            if terminations[i]:
-                print(infos)
         if "final_info" in infos:
             for info in infos["final_info"]:
                 if info is not None:
