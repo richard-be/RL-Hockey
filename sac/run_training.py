@@ -117,8 +117,10 @@ if __name__ == "__main__":
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
         
         # TRY NOT TO MODIFY: record rewards for plotting purposes
-        print(infos)
         print(terminations)
+        for i in range(len(terminations)):
+            if terminations[i]:
+                print(infos)
         if "final_info" in infos:
             for info in infos["final_info"]:
                 if info is not None:
