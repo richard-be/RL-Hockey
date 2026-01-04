@@ -36,7 +36,7 @@ def make_env(env_id, seed, idx, capture_video, run_name, env_mode="NORMAL"):
 if __name__ == "__main__":
 
     args = tyro.cli(Args)
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{args.env_mode}__{int(time.time())}"
     if args.track:
         import wandb
 
@@ -104,6 +104,7 @@ if __name__ == "__main__":
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
     frames = []
+    episode_count = 0
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
@@ -114,15 +115,13 @@ if __name__ == "__main__":
 
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
-        if global_step%1000 < 100:
-            frame = envs.envs[0].render()
-            if frame is not None:
-                frames.append(frame)
+        
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
             for info in infos["final_info"]:
                 if info is not None:
-                    print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
+                    episode_count += 1
+                    print(f"episode={episode_count}, global_step={global_step}, episodic_return={info['episode']['r']}, episode_length={info["episode"]["l"]}")
                     writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                     writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
                     break
@@ -205,5 +204,7 @@ if __name__ == "__main__":
                 )
                 if args.autotune:
                     writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
+    
+    torch.save(actor, f"actors/actor_{run_name}.pkl")
     envs.close()
     writer.close()
