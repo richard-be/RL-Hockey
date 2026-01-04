@@ -121,7 +121,7 @@ if __name__ == "__main__":
             for info in infos["final_info"]:
                 if info is not None:
                     episode_count += 1
-                    print(f"episode={episode_count}, global_step={global_step}, episodic_return={info['episode']['r']}, episode_length={info["episode"]["l"]}")
+                    print(f"episode={episode_count}, global_step={global_step}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
                     writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                     writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
                     break
