@@ -21,7 +21,7 @@ def make_env(env_id, seed, idx, capture_video, run_name, env_mode="NORMAL"):
     print(env_mode)
     def thunk():
         if env_id == "Hockey-v0":
-            env = h_env.HockeyEnv_BasicOpponent(mode=h_env.Mode[env_mode])
+            env = h_env.HockeyEnv_BasicOpponent(mode=h_env.Mode[env_mode]) ##not tested
         else:
             if capture_video and idx == 0:
                 env = gym.make(env_id, render_mode="rgb_array")
@@ -116,13 +116,14 @@ if __name__ == "__main__":
 
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
-        
+        #envs.envs[0].render()
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
             for info in infos["final_info"]:
                 if info is not None:
                     episode_count += 1
-                    print(f"episode={episode_count}, global_step={global_step}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
+                    if episode_count % 50 == 0:
+                        print(f"episode={episode_count}, global_step={global_step}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
                     writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                     writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
                     break
