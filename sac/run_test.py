@@ -11,12 +11,15 @@ import src.hockey_env as h_env
 from dataclasses import dataclass
 import os
 
-def make_env(env_id, seed, weak_opponent, env_mode):
+
+def make_env(env_id, seed, weak_opponent, env_mode, opponent):
     print(env_id)
     print(env_mode)
     def thunk():
-        if env_id == "Hockey-v0":
+        if opponent=="Basic":
             env = h_env.HockeyEnv_BasicOpponent(mode=h_env.Mode[env_mode], weak_opponent=weak_opponent) 
+        else:
+            env = h_env.HockeyEnv_CustomOpponent(opponent)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env.action_space.seed(seed)
         return env
@@ -39,6 +42,8 @@ class Args:
     """how many envs in parallel"""
     actor_file: str=""
     """the torch file from where to load the actor network"""
+    opponent_file: str=""
+    """the torch file from where to load the opponent actor network"""
 
 if __name__ == "__main__":
 
@@ -53,9 +58,12 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
+    opponent = "Basic"
+    if len(args.opponent_file) > 0:
+        opponent = torch.load(os.path.join("opponents"), args.opponent_file)
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, args.seed + i, args.weak_opponent, args.env_mode) for i in range(args.num_envs)]
+        [make_env(args.env_id, args.seed + i, args.weak_opponent, args.env_mode, opponent) for i in range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
