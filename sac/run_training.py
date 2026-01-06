@@ -13,15 +13,13 @@ from src.sac import Args
 from src.sac import Actor
 from src.sac import SoftQNetwork
 import src.hockey_env as h_env
-import imageio
-import Box2D
 
 def make_env(env_id, seed, idx, capture_video, run_name, env_mode="NORMAL"):
     print(env_id)
     print(env_mode)
     def thunk():
         if env_id == "Hockey-v0":
-            env = h_env.HockeyEnv_BasicOpponent(mode=h_env.Mode[env_mode]) ##not tested
+            env = h_env.HockeyEnv_BasicOpponent(mode=h_env.Mode[env_mode]) 
         else:
             if capture_video and idx == 0:
                 env = gym.make(env_id, render_mode="rgb_array")
@@ -37,7 +35,7 @@ def make_env(env_id, seed, idx, capture_video, run_name, env_mode="NORMAL"):
 if __name__ == "__main__":
 
     args = tyro.cli(Args)
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{args.env_mode}__{int(time.time())}"
+    run_name = f"{args.exp_name}__{args.seed}__{args.env_mode}__{args.total_timesteps}__{int(time.time())}"
     if args.track:
         import wandb
 
