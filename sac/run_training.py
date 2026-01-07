@@ -112,8 +112,8 @@ if __name__ == "__main__":
     start_time = time.time()
 
     #setup episode steps for noise indexing
-    episode_steps = np.zeros(args.num_envs)
     env_indices = np.arange(args.num_envs)
+    episode_steps = np.zeros_like(env_indices)
 
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
