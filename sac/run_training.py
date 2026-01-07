@@ -13,6 +13,7 @@ from src.sac import Args
 from src.sac import Actor
 from src.sac import SoftQNetwork
 import src.hockey_env as h_env
+import colorednoise as cn
 
 def make_env(env_id, seed, idx, capture_video, run_name, env_mode="NORMAL"):
     print(env_id)
@@ -32,27 +33,30 @@ def make_env(env_id, seed, idx, capture_video, run_name, env_mode="NORMAL"):
 
     return thunk
 
+def reset_noise(i, noise, beta, samples, action_shape):
+    """
+    Docstring for reset_noise
+    
+    :param i: Description
+    :param noise: Description
+    :param beta: Description
+    :param samples: Description
+    :param action_shape: Description
+    """
+    noise[i] = np.array([cn.powerlaw_psd_gaussian(beta, samples) for _ in range(action_shape)])
+    return noise
+
 if __name__ == "__main__":
 
     args = tyro.cli(Args)
     run_name = f"{args.exp_name}__{args.seed}__{args.env_mode}__{args.total_timesteps}__{int(time.time())}"
-    if args.track:
-        import wandb
 
-        wandb.init(
-            project=args.wandb_project_name,
-            entity=args.wandb_entity,
-            sync_tensorboard=True,
-            config=vars(args),
-            name=run_name,
-            monitor_gym=True,
-            save_code=True,
+    if args.track:
+        writer = SummaryWriter(f"runs/{run_name}")
+        writer.add_text(
+            "hyperparameters",
+            "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
         )
-    writer = SummaryWriter(f"runs/{run_name}")
-    writer.add_text(
-        "hyperparameters",
-        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
-    )
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
@@ -98,7 +102,18 @@ if __name__ == "__main__":
         n_envs=args.num_envs,
         handle_timeout_termination=False,
     )
+
+    #set up colored noise, one series per env and action, gets reset upon episode termination
+    samples = 250
+    noise = np.zeros((args.num_envs, envs.single_action_space.shape[0], samples))
+    for i in range(args.num_envs):
+        noise = reset_noise(i, noise, args.beta, samples, envs.single_action_space.shape[0])
+
     start_time = time.time()
+
+    #setup episode steps for noise indexing
+    episode_steps = np.zeros(args.num_envs)
+    env_indices = np.arange(args.num_envs)
 
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
@@ -111,19 +126,26 @@ if __name__ == "__main__":
         else:
             actions, _, _ = actor.get_action(torch.Tensor(obs).to(device))
             actions = actions.detach().cpu().numpy()
-
+            actions = actions + args.sigma * noise[env_indices, :, episode_steps]
+            actions = np.clip(actions, -1.0, 1.0)
+        
+        episode_steps += 1
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
         #envs.envs[0].render()
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
-            for info in infos["final_info"]:
+            for env_index, info in enumerate(infos["final_info"]):
                 if info is not None:
                     episode_count += 1
-                    if episode_count % 50 == 0:
+                    #reset episode steps and noise for finished env
+                    episode_steps[env_index] = 0  
+                    noise = reset_noise(env_index, noise, args.beta, samples, envs.single_action_space.shape[0])
+                    if episode_count % 1 == 0:
                         print(f"episode={episode_count}, global_step={global_step}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
-                    writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-                    writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
+                    if args.track:
+                        writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
+                        writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
                     break
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
@@ -188,7 +210,7 @@ if __name__ == "__main__":
                 for param, target_param in zip(qf2.parameters(), qf2_target.parameters()):
                     target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
 
-            if global_step % 100 == 0:
+            if global_step % 100 == 0 and args.track:
                 writer.add_scalar("losses/qf1_values", qf1_a_values.mean().item(), global_step)
                 writer.add_scalar("losses/qf2_values", qf2_a_values.mean().item(), global_step)
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
@@ -206,7 +228,7 @@ if __name__ == "__main__":
             if global_step % 1000 == 0:
                 print("SPS:", int(global_step / (time.time() - start_time)))
 
-    
-    torch.save(actor, f"actors/actor_{run_name}.pkl")
     envs.close()
-    writer.close()
+    if args.track:
+        writer.close()
+        torch.save(actor, f"actors/actor_{run_name}.pkl")

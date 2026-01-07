@@ -25,6 +25,8 @@ class Args:
     """the entity (team) of wandb's project"""
     capture_video: bool = False
     """whether to capture videos of the agent performances (check out `videos` folder)"""
+    no_save: bool=False
+    """whether to save the current run and actor"""
 
     # Env specific arguments
     env_id: str = "Hopper-v4"
@@ -61,6 +63,10 @@ class Args:
     """Entropy regularization coefficient."""
     autotune: bool = True
     """automatic tuning of the entropy coefficient"""
+    beta: float = 1.0
+    """colored noise exponent"""
+    sigma: float = 0.1
+    """colored noise scaling"""
 
 class ReplayBufferSamples(NamedTuple):
     observations: torch.Tensor
@@ -90,7 +96,6 @@ class SoftQNetwork(nn.Module):
 
 LOG_STD_MAX = 2
 LOG_STD_MIN = -5
-
 
 class Actor(nn.Module):
     def __init__(self, env):
