@@ -1,4 +1,3 @@
 .venv/
-src/videos/
-sac/src/__pycache__/
+__pycache__/
 output/

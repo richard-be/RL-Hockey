@@ -128,21 +128,26 @@ if __name__ == "__main__":
             actions = actions.detach().cpu().numpy()
             actions = actions + args.sigma * noise[env_indices, :, episode_steps]
             actions = np.clip(actions, -1.0, 1.0)
-        
+
         episode_steps += 1
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
         #envs.envs[0].render()
+
+        #count episodes and reset episode steps and noise for finished envs
+        for env_index, done in enumerate(terminations):
+            if done:
+                episode_count += 1
+                #reset episode steps and noise for finished env
+                episode_steps[env_index] = 0  
+                noise = reset_noise(env_index, noise, args.beta, samples, envs.single_action_space.shape[0])
+
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
             for env_index, info in enumerate(infos["final_info"]):
                 if info is not None:
-                    episode_count += 1
-                    #reset episode steps and noise for finished env
-                    episode_steps[env_index] = 0  
-                    noise = reset_noise(env_index, noise, args.beta, samples, envs.single_action_space.shape[0])
                     if episode_count % 1 == 0:
-                        print(f"episode={episode_count}, global_step={global_step}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
+                        print(f"episode={episode_count}, global_step={global_step}, env={env_index}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
                     if args.track:
                         writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                         writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
