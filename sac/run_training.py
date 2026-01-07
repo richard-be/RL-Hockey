@@ -104,7 +104,7 @@ if __name__ == "__main__":
     )
 
     #set up colored noise, one series per env and action, gets reset upon episode termination
-    samples = 250
+    samples = 251
     noise = np.zeros((args.num_envs, envs.single_action_space.shape[0], samples))
     for i in range(args.num_envs):
         noise = reset_noise(i, noise, args.beta, samples, envs.single_action_space.shape[0])
