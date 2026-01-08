@@ -49,7 +49,7 @@ def reset_noise(i, noise, beta, samples, action_shape):
 if __name__ == "__main__":
 
     args = tyro.cli(Args)
-    run_name = f"{args.exp_name}__{args.seed}__{args.env_mode}__{args.total_timesteps}__{int(time.time())}"
+    run_name = f"{args.exp_name}__{args.seed}__{args.beta}__{args.total_timesteps}__{int(time.time())}"
 
     if args.track:
         writer = SummaryWriter(f"runs/{run_name}")
@@ -236,4 +236,4 @@ if __name__ == "__main__":
     envs.close()
     if args.track:
         writer.close()
-        torch.save(actor, f"actors/actor_{run_name}.pkl")
+        torch.save(actor.state_dict(), f"actors/actor_{run_name}.pkl")
