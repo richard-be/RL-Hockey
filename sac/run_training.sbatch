@@ -28,4 +28,4 @@ singularity exec \
   --bind $PWD:/workspace \
   $HOME/singularity/images/rl_hockey.simg \
   python3 run_training.py \
-    --env-id Hockey-v0 --env-mode NORMAL --total-timesteps 300000 --num-envs 4 --track
+    --env-id Hockey-v0 --env-mode NORMAL --total-timesteps 600000 --num-envs 4 --track --sigma 0.2
