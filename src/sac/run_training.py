@@ -16,7 +16,6 @@ from env.custom_hockey import HockeyEnv_Custom_BasicOpponent
 import hockey.hockey_env as h_env
 import colorednoise as cn
 import os
-import matplotlib.pyplot as plt
 
 def make_env(seed, idx, capture_video, run_name, env_mode="NORMAL"):
     def thunk():
