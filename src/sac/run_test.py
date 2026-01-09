@@ -69,7 +69,7 @@ if __name__ == "__main__":
     print(device)
     opponent = "Basic"
     if len(args.opponent_file) > 0:
-        opponent = torch.load(os.path.join("opponents"), args.opponent_file, map_location=device) #also state dict load?
+        opponent = torch.load(os.path.join("models"), args.opponent_file, map_location=device) #also state dict load?
     # env setup
     envs = gym.vector.SyncVectorEnv(
         [make_env(args.env_id, args.seed + i, args.weak_opponent, args.env_mode, opponent) for i in range(args.num_envs)]
@@ -77,7 +77,7 @@ if __name__ == "__main__":
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
     actor = Actor(envs)
-    actor.load_state_dict(torch.load(os.path.join("actors", args.actor_file)))
+    actor.load_state_dict(torch.load(os.path.join("models/sac", args.actor_file), map_location=device))
     actor.to(device)
     #opponent = torch.load(os.path.join("actors", args.actor_file), map_location=device) #also state dict load?
 
