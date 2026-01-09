@@ -140,7 +140,7 @@ if __name__ == "__main__":
         if "final_info" in infos:
             for env_index, info in enumerate(infos["final_info"]):
                 if info is not None:
-                    if episode_count % 1 == 0:
+                    if episode_count % 100 == 0:
                         print(f"episode={episode_count}, global_step={global_step}, env={env_index}, winner={info['winner']}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
                     if args.track:
                         writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
