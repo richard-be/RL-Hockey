@@ -14,6 +14,7 @@ from agent.sac import Actor
 from agent.sac import SoftQNetwork
 import hockey.hockey_env as h_env
 import colorednoise as cn
+import os
 
 def make_env(env_id, seed, idx, capture_video, run_name, env_mode="NORMAL"):
     print(env_id)
@@ -50,9 +51,10 @@ if __name__ == "__main__":
 
     args = tyro.cli(Args)
     run_name = f"{args.exp_name}__{args.seed}__{args.beta}__{args.total_timesteps}__{int(time.time())}"
+    workdir = os.getcwd()
 
     if args.track:
-        writer = SummaryWriter(f"runs/{run_name}")
+        writer = SummaryWriter(f"runs/sac/{run_name}")
         writer.add_text(
             "hyperparameters",
             "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
@@ -236,4 +238,4 @@ if __name__ == "__main__":
     envs.close()
     if args.track:
         writer.close()
-        torch.save(actor.state_dict(), f"actors/actor_{run_name}.pkl")
+        torch.save(actor.state_dict(), f"models/sac/{run_name}.pkl")
