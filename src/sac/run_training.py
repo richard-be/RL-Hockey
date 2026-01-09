@@ -8,11 +8,11 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
-from src.buffers import ReplayBuffer
+from agents.buffers import ReplayBuffer
 from src.sac import Args
 from src.sac import Actor
 from src.sac import SoftQNetwork
-import src.hockey_env as h_env
+import hockey.hockey_env as h_env
 import colorednoise as cn
 
 def make_env(env_id, seed, idx, capture_video, run_name, env_mode="NORMAL"):
