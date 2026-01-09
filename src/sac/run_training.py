@@ -12,22 +12,15 @@ from agent.buffers import ReplayBuffer
 from agent.sac import Args
 from agent.sac import Actor
 from agent.sac import SoftQNetwork
+from env.custom_hockey import HockeyEnv_Custom_BasicOpponent
 import hockey.hockey_env as h_env
 import colorednoise as cn
 import os
+import matplotlib.pyplot as plt
 
-def make_env(env_id, seed, idx, capture_video, run_name, env_mode="NORMAL"):
-    print(env_id)
-    print(env_mode)
+def make_env(seed, idx, capture_video, run_name, env_mode="NORMAL"):
     def thunk():
-        if env_id == "Hockey-v0":
-            env = h_env.HockeyEnv_BasicOpponent(mode=h_env.Mode[env_mode]) 
-        else:
-            if capture_video and idx == 0:
-                env = gym.make(env_id, render_mode="rgb_array")
-                env = gym.wrappers.RecordVideo(env, f"videos/{run_name}") 
-            else:
-                env = gym.make(env_id)
+        env = HockeyEnv_Custom_BasicOpponent(mode=h_env.Mode[env_mode]) 
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env.action_space.seed(seed)
         return env
@@ -70,7 +63,7 @@ if __name__ == "__main__":
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, args.seed + i, i, args.capture_video, run_name, args.env_mode) for i in range(args.num_envs)]
+        [make_env(args.seed + i, i, args.capture_video, run_name, args.env_mode) for i in range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
@@ -149,7 +142,7 @@ if __name__ == "__main__":
             for env_index, info in enumerate(infos["final_info"]):
                 if info is not None:
                     if episode_count % 1 == 0:
-                        print(f"episode={episode_count}, global_step={global_step}, env={env_index}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
+                        print(f"episode={episode_count}, global_step={global_step}, env={env_index}, winner={info['winner']}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
                     if args.track:
                         writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                         writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)

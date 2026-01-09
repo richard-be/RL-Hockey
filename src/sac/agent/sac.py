@@ -29,9 +29,7 @@ class Args:
     """whether to save the current run and actor"""
 
     # Env specific arguments
-    env_id: str = "Hopper-v4"
-    """the environment id of the task"""
-    env_mode: str = "Normal"
+    env_mode: str = "NORMAL"
     """For Hockey env, Train or Playing Mode"""
     weak_opponent: bool = True
     """Opponent Difficulty"""
