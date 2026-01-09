@@ -6,7 +6,7 @@ import gymnasium as gym
 import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
-from src.sac import Actor
+from agent.sac import Actor
 import hockey.hockey_env as h_env
 from dataclasses import dataclass
 import os
@@ -76,10 +76,10 @@ if __name__ == "__main__":
     )
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
-    """actor = Actor(envs)
+    actor = Actor(envs)
     actor.load_state_dict(torch.load(os.path.join("actors", args.actor_file)))
-    actor.to(device)"""
-    opponent = torch.load(os.path.join("actors", args.actor_file), map_location=device) #also state dict load?
+    actor.to(device)
+    #opponent = torch.load(os.path.join("actors", args.actor_file), map_location=device) #also state dict load?
 
 
     start_time = time.time()
