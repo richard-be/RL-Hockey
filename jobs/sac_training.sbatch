@@ -12,9 +12,9 @@
 # each node has 4 gpus
 #SBATCH --time=23:00:00
 # job length: the job will run either until completion or until this timer runs out
-#SBATCH --error=../outputs/sac/job.%J.err
+#SBATCH --error=outputs/sac/job.%J.err
 # %J is the job ID, errors will be written to this file
-#SBATCH --output=../outputs/sac/job.%J.out
+#SBATCH --output=outputs/sac/job.%J.out
 # the output will be written in this file
 #SBATCH --mail-type=ALL
 # write a mail if a job begins, ends, fails, gets requeued or stages out
