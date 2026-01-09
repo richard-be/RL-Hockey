@@ -12,9 +12,9 @@
 # each node has 4 gpus
 #SBATCH --time=23:00:00
 # job length: the job will run either until completion or until this timer runs out
-#SBATCH --error=output/job.%J.err
+#SBATCH --error=../outputs/sac/job.%J.err
 # %J is the job ID, errors will be written to this file
-#SBATCH --output=output/job.%J.out
+#SBATCH --output=../outputs/sac/job.%J.out
 # the output will be written in this file
 #SBATCH --mail-type=ALL
 # write a mail if a job begins, ends, fails, gets requeued or stages out
@@ -26,6 +26,6 @@
 singularity exec \
   --nv \
   --bind $PWD:/workspace \
-  $HOME/singularity/images/rl_hockey.simg \
-  python3 run_training.py \
-    --env-id Hockey-v0 --env-mode NORMAL --total-timesteps 600000 --num-envs 4 --track --sigma 0.2
+  $PWD/singularity/images/rl_hockey.simg \
+  python3 /workspace/src/sac/run_training.py \
+    --env-id Hockey-v0 --env-mode NORMAL --total-timesteps 6000 --num-envs 4 --track --sigma 0.2
