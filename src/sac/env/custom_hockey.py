@@ -82,7 +82,7 @@ class OpponentSampler():
 
   def sample_opponent(self, global_episode):
     probs = self.get_probs(global_episode)
-    choice = np.random.choice(["easy", "hard", "custom", "self"], probs)
+    choice = np.random.choice(["easy", "hard", "custom", "self"], p=probs)
     if choice == "easy":
       opponent = self.easy
     elif choice == "custom" and len(self.custom_opponent_pool) > 0:
@@ -94,9 +94,9 @@ class OpponentSampler():
     return opponent    
   
   def get_probs(self, global_episode):
-    if global_episode < 1e5:
+    if global_episode < 1e3:
       probs = [1, 0, 0, 0]
-    elif global_episode < 3e5:
+    elif global_episode < 3e3:
       probs = [0.5, 0.4, 0, 0.1]
     else:
       probs = [0.2, 0.4, 0, 0.4]
