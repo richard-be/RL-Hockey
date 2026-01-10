@@ -12,14 +12,15 @@ from agent.buffers import ReplayBuffer
 from agent.sac import Args
 from agent.sac import Actor
 from agent.sac import SoftQNetwork
-from env.custom_hockey import HockeyEnv_Custom_BasicOpponent
+import env.custom_hockey as c_env
 import hockey.hockey_env as h_env
 import colorednoise as cn
-import os
+import copy
 
-def make_env(seed, idx, capture_video, run_name, env_mode="NORMAL"):
+def make_env(seed, opponent_sampler, episode_count, device, env_mode="NORMAL"):
     def thunk():
-        env = HockeyEnv_Custom_BasicOpponent(mode=h_env.Mode[env_mode]) 
+        env = c_env.HockeyEnv_Custom_CustomOpponent(h_env.BasicOpponent(weak=True), device, mode=h_env.Mode[env_mode]) 
+        env = c_env.OpponentResetWrapper(env, opponent_sampler, episode_count)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env.action_space.seed(seed)
         return env
@@ -43,7 +44,6 @@ if __name__ == "__main__":
 
     args = tyro.cli(Args)
     run_name = f"{args.exp_name}__{args.seed}__{args.beta}__{args.total_timesteps}__{int(time.time())}"
-    workdir = os.getcwd()
 
     if args.track:
         writer = SummaryWriter(f"runs/sac/{run_name}")
@@ -60,9 +60,11 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
+    opponent_sampler = c_env.OpponentSampler(args.self_play_len)
+    episode_count = c_env.EpisodeCounter()
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.seed + i, i, args.capture_video, run_name, args.env_mode) for i in range(args.num_envs)]
+        [make_env(args.seed + i, opponent_sampler, episode_count, device, args.env_mode) for i in range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
@@ -112,7 +114,6 @@ if __name__ == "__main__":
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
     frames = []
-    episode_count = 0
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
@@ -126,12 +127,13 @@ if __name__ == "__main__":
         episode_steps += 1
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
+        
         #envs.envs[0].render()
 
         #count episodes and reset episode steps and noise for finished envs
         for env_index, done in enumerate(terminations):
             if done:
-                episode_count += 1
+                episode_count.increment()
                 #reset episode steps and noise for finished env
                 episode_steps[env_index] = 0  
                 noise = reset_noise(env_index, noise, args.beta, samples, envs.single_action_space.shape[0])
@@ -140,8 +142,8 @@ if __name__ == "__main__":
         if "final_info" in infos:
             for env_index, info in enumerate(infos["final_info"]):
                 if info is not None:
-                    if episode_count % 100 == 0:
-                        print(f"episode={episode_count}, global_step={global_step}, env={env_index}, winner={info['winner']}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
+                    if episode_count.value % 1000 == 0:
+                        print(f"episode={episode_count.value}, global_step={global_step}, env={env_index}, winner={info['winner']}, SPS={int(global_step / (time.time() - start_time))}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
                     if args.track:
                         writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                         writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
@@ -224,8 +226,15 @@ if __name__ == "__main__":
                 )
                 if args.autotune:
                     writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
-            if global_step % 1000 == 0:
-                print("SPS:", int(global_step / (time.time() - start_time)))
+
+            if global_step >= 1e5 and global_step % 1e5 == 0:
+                frozen_actor = copy.deepcopy(actor)
+                frozen_actor.eval()
+                for p in frozen_actor.parameters():
+                    p.requires_grad = False
+
+                opponent_sampler.add_self_play_opponent(frozen_actor)
+
 
     envs.close()
     if args.track:

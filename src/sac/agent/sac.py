@@ -37,6 +37,8 @@ class Args:
     """total timesteps of the experiments"""
     num_envs: int = 1
     """the number of parallel game environments"""
+    self_play_len: int=10
+    """the sliding windows size of versions of the agent himself to train against"""
 
     #Algorithm specific arguments
     buffer_size: int = int(1e6)
