@@ -14,16 +14,17 @@ import env.custom_hockey as c_env
 
 
 
-def make_env(env_id, seed, weak_opponent, env_mode, opponent):
+def make_env(env_id, seed, weak_opponent, env_mode, opponent, device, opponent_model=None):
     print(env_id)
     print(env_mode)
     def thunk():
         if opponent=="basic":
+            print(weak_opponent)
             env = h_env.HockeyEnv_BasicOpponent(mode=h_env.Mode[env_mode], weak_opponent=weak_opponent)
         elif opponent=="human":
             env = c_env.HockeyEnv_HumanOppoent(mode=h_env.Mode[env_mode])
-        else:
-            env = c_env.HockeyEnv_Custom_BasicOpponent(mode=h_env.Mode[env_mode], weak_opponent=weak_opponent) 
+        elif opponent == "self":
+            env = c_env.HockeyEnv_Custom_CustomOpponent(opponent_model, device, mode=h_env.Mode[env_mode]) 
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env.action_space.seed(seed)
         return env
@@ -71,20 +72,22 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-    print(device)
 
-    if len(args.opponent_file) > 0:
-        opponent = torch.load(os.path.join("models"), args.opponent_file, map_location=device) #also state dict load?
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, args.seed + i, args.weak_opponent, args.env_mode, args.opponent) for i in range(args.num_envs)]
+        [make_env(args.env_id, args.seed + i, args.weak_opponent, args.env_mode, args.opponent, device, h_env.BasicOpponent()) for i in range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
+
+    if len(args.opponent_file) > 0 and args.opponent == "self":
+        opponent_model = Actor(envs)
+        opponent_model.load_state_dict(torch.load(os.path.join("models/sac", args.opponent_file), map_location=device))
+        opponent_model.to(device)
+        envs.envs[0].set_opponent(opponent_model)
 
     actor = Actor(envs)
     actor.load_state_dict(torch.load(os.path.join("models/sac", args.actor_file), map_location=device))
     actor.to(device)
-    #actor = torch.load(os.path.join("actors", args.actor_file), map_location=device) #also state dict load?
 
 
     start_time = time.time()
