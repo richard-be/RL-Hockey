@@ -142,7 +142,7 @@ if __name__ == "__main__":
         if "final_info" in infos:
             for env_index, info in enumerate(infos["final_info"]):
                 if info is not None:
-                    if episode_count.value % 1 == 0:
+                    if episode_count.value % 1000 == 0:
                         sps = int(global_step / (time.time() - start_time))
                         opponent = envs.envs[env_index].get_opponent_name()
                         print(f"episode={episode_count.value}, global_step={global_step}, env={env_index}, winner={info['winner']}, SPS={sps}, opponent={opponent}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
