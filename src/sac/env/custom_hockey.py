@@ -97,11 +97,11 @@ class OpponentSampler():
     return opponent    
   
   def get_probs(self, global_episode):
-    if global_episode < 1e3:
+    if global_episode < 1e4:
       probs = [1, 0, 0, 0]
-    elif global_episode < 3e3:
+    elif global_episode < 3e4:
       probs = [0.5, 0.4, 0, 0.1]
-    elif global_episode < 4e3:
+    elif global_episode < 4e4:
       probs = [0.2, 0.4, 0, 0.4]
     else:
       probs = [0.1, 0.4, 0, 0.5]
