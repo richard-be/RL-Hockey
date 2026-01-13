@@ -14,7 +14,7 @@ from agent.sac import Actor
 from agent.sac import SoftQNetwork
 import env.custom_hockey as c_env
 import hockey.hockey_env as h_env
-import colorednoise as cn
+from env.colored_noise import generate_colored_noise
 import copy
 
 def make_env(seed, opponent_sampler, episode_count, device, env_mode="NORMAL"):
@@ -37,7 +37,7 @@ def reset_noise(i, noise, beta, samples, action_shape):
     :param samples: Description
     :param action_shape: Description
     """
-    noise[i] = np.array([cn.powerlaw_psd_gaussian(beta, samples) for _ in range(action_shape)])
+    noise[i] = np.array([generate_colored_noise(samples, beta) for _ in range(action_shape)])
     return noise
 
 if __name__ == "__main__":
@@ -104,7 +104,6 @@ if __name__ == "__main__":
     noise = np.zeros((args.num_envs, envs.single_action_space.shape[0], samples))
     for i in range(args.num_envs):
         noise = reset_noise(i, noise, args.beta, samples, envs.single_action_space.shape[0])
-
     start_time = time.time()
 
     #setup episode steps for noise indexing
