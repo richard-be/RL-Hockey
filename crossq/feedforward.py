@@ -1,0 +1,94 @@
+from torch import nn
+from dataclasses import dataclass, field
+from copy import deepcopy
+
+import torchrl.modules
+
+
+@dataclass
+class NormalizationConfig:
+    type: str = "BN"
+    momentum: float = .01
+
+    warmup_steps: int = 10_000  # for Batch renorm
+
+@dataclass
+class NNConfig:
+    input_dim: int
+    hidden_dim: int
+    output_dim: int | list[int]  # if  multiple output layers
+
+    num_hidden_layers: int = 1
+    act_func: nn.Module = field(default_factory=nn.ReLU)
+
+    output_act: None | nn.Module | list[None | nn.Module] = None  # can be a list if num_heads > 1
+    
+    num_heads: int = 1
+
+    use_normalization: bool = True
+    normalization_config: NormalizationConfig = field(default_factory=NormalizationConfig)
+
+class FeedForward(nn.Module):
+
+    def __init__(self, config: NNConfig,
+                        *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
+        # Construct Input layer
+        layers = [nn.Linear(config.input_dim, config.hidden_dim), config.act_func]
+
+        if config.use_normalization:
+            if config.normalization_config.type == "BN":
+                norm_layer = nn.BatchNorm1d(num_features=config.hidden_dim,
+                                            momentum=config.normalization_config.momentum)
+            else:
+                norm_layer = torchrl.modules.BatchRenorm1d(num_features=config.hidden_dim,
+                                                           momentum=config.normalization_config.momentum,
+                                                           warmup_steps=config.normalization_config.warmup_steps)
+            layers.append(deepcopy(norm_layer))
+     
+        for _ in range(config.num_hidden_layers):
+            layers.append(nn.Linear(config.hidden_dim, config.hidden_dim))
+            layers.append(config.act_func)
+            if config.use_normalization:
+                layers.append(deepcopy(norm_layer))
+
+        self.body = nn.Sequential(*layers)
+
+
+        # add output layer(s)
+        output_layers = []
+        for idx in range(config.num_heads):
+            out_dim = config.output_dim[idx] if isinstance(config.output_dim, list) else config.output_dim
+            fc_out = nn.Linear(config.hidden_dim, out_dim)
+
+            if config.output_act:
+                out_act = config.output_act[idx] if isinstance(config.output_act, list) else config.output_act
+
+                if not out_act:
+                    output_layers.append(fc_out)
+                else:
+                    output_layers.append(nn.Sequential(fc_out, out_act))
+            else:
+                output_layers.append(fc_out)
+
+        self.output_layers = nn.ModuleList(output_layers)
+            
+
+
+    
+    def forward(self, x):
+        z = self.body(x)
+        if len(self.output_layers) > 1:
+            return [out_layer(z) for out_layer in self.output_layers]
+        else:
+            return self.output_layers[0](z)
+        
+
+def get_gradient_norm(model: nn.Module, p: int = 2) -> float:
+    norm = 0
+    for param in model.parameters():
+        param_norm = param.grad.detach().data.norm(p).item()
+        norm += param_norm ** p
+    return norm ** (1.0 / p )
