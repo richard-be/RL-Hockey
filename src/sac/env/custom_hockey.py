@@ -91,7 +91,8 @@ class OpponentSampler():
     elif choice == "custom" and len(self.custom_opponent_pool) > 0:
         opponent = np.random.choice(self.custom_opponent_pool)
     elif choice == "self" and len(self.self_play_pool) > 0:
-        opponent = np.random.choice(self.self_play_pool)
+        self_probs = (np.arange(len(self.self_play_pool))+1) / np.sum(np.arange(len(self.self_play_pool))+1)
+        opponent = np.random.choice(self.self_play_pool, p=self_probs)
     else:
       opponent = self.hard #if custom or self dont exist, just use more hard basic enemies
     return opponent    

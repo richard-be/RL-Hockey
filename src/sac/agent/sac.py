@@ -37,7 +37,7 @@ class Args:
     """total timesteps of the experiments"""
     num_envs: int = 1
     """the number of parallel game environments"""
-    self_play_len: int=10
+    self_play_len: int=5
     """the sliding windows size of versions of the agent himself to train against"""
 
     #Algorithm specific arguments
