@@ -42,8 +42,8 @@ def reset_noise(i, noise, beta, samples, action_shape):
     noise[i] = np.array([generate_colored_noise(samples, beta) for _ in range(action_shape)])
     return noise
 
-def main(args: Args):
-
+if __name__ == "__main__":
+    args = tyro.cli(Args)
     run_name = f"{args.exp_name}_{args.alpha}_{args.autotune}_{args.beta}_{args.total_timesteps}_{int(time.time())}"
 
     if args.track:
@@ -243,6 +243,3 @@ def main(args: Args):
         writer.close()
         torch.save(actor.state_dict(), f"models/sac/{run_name}.pkl")
 
-if __name__ == "__main__":
-    args = tyro.cli(Args)
-    main(args)
