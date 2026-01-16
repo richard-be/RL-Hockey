@@ -17,14 +17,16 @@ import hockey.hockey_env as h_env
 from env.colored_noise import generate_colored_noise
 import copy
 
-def make_env(seed, opponent_sampler, episode_count, device, env_mode="NORMAL"):
+def make_env(seed, episode_count, device, weak_opponent, env_mode="NORMAL", opponent_sampler=None):
     def thunk():
-        env = c_env.HockeyEnv_Custom_CustomOpponent(h_env.BasicOpponent(weak=True), device, mode=h_env.Mode[env_mode]) 
-        env = c_env.OpponentResetWrapper(env, opponent_sampler, episode_count)
+        if "opponent_sampler" == None:
+            env = c_env.HockeyEnv_Custom_BasicOpponent(env_mode, weak_opponent)
+        else:
+            env = c_env.HockeyEnv_Custom_CustomOpponent(h_env.BasicOpponent(weak=True), device, mode=h_env.Mode[env_mode]) 
+            env = c_env.OpponentResetWrapper(env, opponent_sampler, episode_count)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env.action_space.seed(seed)
         return env
-
     return thunk
 
 def reset_noise(i, noise, beta, samples, action_shape):
@@ -40,10 +42,9 @@ def reset_noise(i, noise, beta, samples, action_shape):
     noise[i] = np.array([generate_colored_noise(samples, beta) for _ in range(action_shape)])
     return noise
 
-if __name__ == "__main__":
+def main(args: Args):
 
-    args = tyro.cli(Args)
-    run_name = f"{args.exp_name}__{args.seed}__{args.beta}__{args.total_timesteps}__{int(time.time())}"
+    run_name = f"{args.exp_name}_{args.alpha}_{args.autotune}_{args.beta}_{args.total_timesteps}_{int(time.time())}"
 
     if args.track:
         writer = SummaryWriter(f"runs/sac/{run_name}")
@@ -64,7 +65,7 @@ if __name__ == "__main__":
     episode_count = c_env.EpisodeCounter()
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.seed + i, opponent_sampler, episode_count, device, args.env_mode) for i in range(args.num_envs)]
+        [make_env(args.seed + i, episode_count, device, args.weak_opponent, args.env_mode, opponent_sampler,) for i in range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
@@ -241,3 +242,7 @@ if __name__ == "__main__":
     if args.track:
         writer.close()
         torch.save(actor.state_dict(), f"models/sac/{run_name}.pkl")
+
+if __name__ == "__main__":
+    args = tyro.cli(Args)
+    main(args)
