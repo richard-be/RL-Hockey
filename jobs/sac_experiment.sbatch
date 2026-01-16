@@ -48,7 +48,7 @@ for PARAM in "${combinations[@]}"; do
       --bind $PWD:/workspace \
       $PWD/singularity/images/rl_hockey.simg \
       python3 /workspace/src/sac/run_training.py \
-      --alpha "$alpha" --beta "$beta" --total-timesteps 400000
+      --alpha "$alpha" --beta "$beta" --total-timesteps 400000 --track --num-envs 4
     )
 
     if [[ "$autotune" == "false" ]]; then
