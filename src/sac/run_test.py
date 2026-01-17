@@ -10,17 +10,21 @@ from agent.sac import Actor
 import hockey.hockey_env as h_env
 from dataclasses import dataclass
 import os
+import env.custom_hockey as c_env
 
 
 
-def make_env(env_id, seed, weak_opponent, env_mode, opponent):
+def make_env(env_id, seed, weak_opponent, env_mode, opponent, device, opponent_model=None):
     print(env_id)
     print(env_mode)
     def thunk():
-        if opponent=="Basic":
-            env = h_env.HockeyEnv_BasicOpponent(mode=h_env.Mode[env_mode], weak_opponent=weak_opponent) 
-        else:
-            env = h_env.HockeyEnv_CustomOpponent(opponent)
+        if opponent=="basic":
+            print(weak_opponent)
+            env = h_env.HockeyEnv_BasicOpponent(mode=h_env.Mode[env_mode], weak_opponent=weak_opponent)
+        elif opponent=="human":
+            env = c_env.HockeyEnv_HumanOppoent(mode=h_env.Mode[env_mode])
+        elif opponent == "self":
+            env = c_env.HockeyEnv_Custom_CustomOpponent(opponent_model, device, mode=h_env.Mode[env_mode]) 
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env.action_space.seed(seed)
         return env
@@ -53,6 +57,8 @@ class Args:
     """if toggled, cuda will be enabled by default"""
     render: bool = True
     """if toggled, window will be rendered"""
+    opponent: str="basic"
+    """which opponent to play against"""
 
 if __name__ == "__main__":
 
@@ -66,20 +72,22 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-    print(device)
-    opponent = "Basic"
-    if len(args.opponent_file) > 0:
-        opponent = torch.load(os.path.join("models"), args.opponent_file, map_location=device) #also state dict load?
+
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, args.seed + i, args.weak_opponent, args.env_mode, opponent) for i in range(args.num_envs)]
+        [make_env(args.env_id, args.seed + i, args.weak_opponent, args.env_mode, args.opponent, device, h_env.BasicOpponent()) for i in range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
+
+    if len(args.opponent_file) > 0 and args.opponent == "self":
+        opponent_model = Actor(envs)
+        opponent_model.load_state_dict(torch.load(os.path.join("models/sac", args.opponent_file), map_location=device))
+        opponent_model.to(device)
+        envs.envs[0].set_opponent(opponent_model)
 
     actor = Actor(envs)
     actor.load_state_dict(torch.load(os.path.join("models/sac", args.actor_file), map_location=device))
     actor.to(device)
-    #opponent = torch.load(os.path.join("actors", args.actor_file), map_location=device) #also state dict load?
 
 
     start_time = time.time()
@@ -90,8 +98,8 @@ if __name__ == "__main__":
     global_step = 0
     while episode_count < args.num_games:
         # ALGO LOGIC: put action logic here
-        actions = np.array([envs.single_action_space.sample() for _ in range(envs.num_envs)])
-
+        actions, _, _ = actor.get_action(torch.Tensor(obs).to(device))
+        actions = actions.detach().cpu().numpy()
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
 
@@ -101,10 +109,8 @@ if __name__ == "__main__":
         if "final_info" in infos:
             for env_index, info in enumerate(infos["final_info"]):
                 if info is not None:
-                    print(infos["final_info"][env_index]["winner"])
                     episode_count += 1
-                    if episode_count % 50 == 0:
-                        print(f"episode={episode_count}, global_step={global_step}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
+                    print(f"episode={episode_count}, global_step={global_step}, env={env_index}, winner={info['winner']}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
                     break
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
