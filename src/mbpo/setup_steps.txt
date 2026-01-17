@@ -1,0 +1,6 @@
+pip install "pip<24.1"
+pip install git+https://github.com/facebookresearch/mbrl-lib
+pip install importlib-resources
+pip install glfw
+pip install "mujoco<2.3"
+pip install "numpy<2.0"
