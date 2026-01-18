@@ -12,6 +12,7 @@ from hockey.hockey_env import HockeyEnv
 
 @hydra.main(config_path="conf", config_name="main")
 def run(cfg: omegaconf.DictConfig):
+    print("Using device", cfg.device)
     env, term_fn, reward_fn = mbrl.util.env.EnvHandler.make_env(cfg)
     np.random.seed(cfg.seed)
     torch.manual_seed(cfg.seed)
