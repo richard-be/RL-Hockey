@@ -9,8 +9,8 @@ class HockeyEnv_Custom(h_env.HockeyEnv):
   def get_reward(self, info):
     r = self._compute_reward()
     r += info["reward_closeness_to_puck"]
-    r += info["reward_touch_puck"]
-    r += info["reward_puck_direction"]
+    #r += info["reward_touch_puck"]
+    #r += info["reward_puck_direction"]
     return float(r)
   
 class HockeyEnv_Custom_BasicOpponent(HockeyEnv_Custom):
