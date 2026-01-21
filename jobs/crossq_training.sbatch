@@ -3,14 +3,14 @@
 # give it any name you want
 #SBATCH --cpus-per-task=4
 # max 24 per node
-#SBATCH --partition=test
+#SBATCH --partition=day
 # choose out of day, week, month depending on job duration
 #SBATCH --mem-per-cpu=3G
 # max 251GB per node
 #SBATCH --gres=gpu:1
 # how many gpus to use
 # each node has 4 gpus
-#SBATCH --time=00:10:00
+#SBATCH --time=10:00:00l
 # job length: the job will run either until completion or until this timer runs out
 #SBATCH --error=outputs/crossq/job.%J.err
 # %J is the job ID, errors will be written to this file
