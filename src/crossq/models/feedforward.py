@@ -2,7 +2,7 @@ from torch import nn
 from dataclasses import dataclass, field
 from copy import deepcopy
 
-import torchrl.modules
+from models.batchrenorm import BatchRenorm1d
 
 
 @dataclass
@@ -43,7 +43,7 @@ class FeedForward(nn.Module):
                 norm_layer = nn.BatchNorm1d(num_features=config.hidden_dim,
                                             momentum=config.normalization_config.momentum)
             else:
-                norm_layer = torchrl.modules.BatchRenorm1d(num_features=config.hidden_dim,
+                norm_layer = BatchRenorm1d(num_features=config.hidden_dim,
                                                            momentum=config.normalization_config.momentum,
                                                            warmup_steps=config.normalization_config.warmup_steps)
             layers.append(deepcopy(norm_layer))
