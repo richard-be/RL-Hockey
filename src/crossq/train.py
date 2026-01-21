@@ -108,7 +108,7 @@ def fit_cross_q(config: CrossQConfig):
                         action_high=env.action_space.high)
 
     if config.use_tensorboard:
-        writer = SummaryWriter(comment=f"CrossQ-{config.env}")
+        writer = SummaryWriter(log_dir="runs/crossq", comment=f"CrossQ-{config.env}")
 
 
     observation, info = env.reset(seed=config.seed)
