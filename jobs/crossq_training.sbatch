@@ -25,6 +25,8 @@
 
 singularity exec \
   --nv \
+  --bind $PWD:/workspace \
   $PWD/singularity/images/rl_hockey.simg \
-  python3 src/crossq/train.py \
+  python3 /workspace/src/crossq/train.py \
+    env.env_id="Hockey-v0" 
 
