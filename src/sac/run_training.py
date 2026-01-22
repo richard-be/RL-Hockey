@@ -65,7 +65,7 @@ if __name__ == "__main__":
     episode_count = c_env.EpisodeCounter()
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.seed + i, episode_count, device, args.weak_opponent, args.env_mode, opponent_sampler,) for i in range(args.num_envs)]
+        [make_env(args.seed + i, episode_count, device, args.weak_opponent, args.env_mode, opponent_sampler) for i in range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
