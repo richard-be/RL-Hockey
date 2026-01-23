@@ -4,7 +4,6 @@ from torch import optim
 import numpy as np
 
 
-
 from torch.utils.tensorboard import SummaryWriter
 
 from models.critic import QNetwork
@@ -96,7 +95,7 @@ class CrossQAgentConfig:
     q_lr: float = 1e-3
 
     batch_size: int = 256
-    device: str = "cuda"
+    device: str = "mps"
 
     adam_beta1: float = .5
     adam_beta2: float = .999
@@ -196,8 +195,10 @@ class CrossQAgent:
             q_func.load_state_dict(q_state)
     
     # TODO: Write somewhere down that it is unstable without gradient clipping
-    def learn(self, global_step: int, writer: SummaryWriter | None = None) -> None:
+    def learn(self, update_policy: bool) -> dict[str, float]:
         observation, action, next_observation, reward, is_terminal = self.sample_data(self.config.batch_size)
+
+        logs = {}
 
         if self.config.dynamic_alpha:
             alpha_loss = compute_alpha_loss(self.policy, self.log_alpha, self.entropy_target, observation)
@@ -207,14 +208,14 @@ class CrossQAgent:
 
             torch.nn.utils.clip_grad_norm_(self.log_alpha, 1.0)
 
-            if writer:
-                writer.add_scalar("Grad/Alpha", self.log_alpha.grad.detach().norm(2).item(), global_step)
+            logs['alpha_grad_norm'] = self.log_alpha.grad.detach().norm(2).item()
 
             self.alpha_optimizer.step()
 
             alpha = torch.exp(self.log_alpha).item()
-            if writer:
-                writer.add_scalar("Value/Alpha", alpha, global_step)
+
+            logs['alpha_value'] = alpha
+
 
             
         else:
@@ -229,15 +230,14 @@ class CrossQAgent:
         for q_func in self.q_functions:
             torch.nn.utils.clip_grad_norm_(q_func.parameters(), 1.0)
 
-        if writer:
-            writer.add_scalar("Loss/Q_Loss",  critic_loss.item(), global_step)
-            for idx, q_func in enumerate(self.q_functions):
-                writer.add_scalar(f"Grad/Q_{idx}", get_gradient_norm(q_func), global_step)
+        logs["critic_loss"] = critic_loss.item()
+        logs["q_grad_norms"] = [get_gradient_norm(q_func) for q_func in self.q_functions]
+
 
         self.q_optimizer.step()
 
         
-        if global_step % self.config.policy_delay == 0:
+        if update_policy:
             actor_loss, entropy, values = compute_actor_loss(self.q_functions, self.policy, alpha, observation)
         
             self.policy_optimizer.zero_grad()
@@ -245,15 +245,13 @@ class CrossQAgent:
 
             torch.nn.utils.clip_grad_norm_(self.policy.parameters(), 1.0)
 
-            if writer:
-                writer.add_scalar("Loss/Actor_Loss",  actor_loss.item(), global_step)   
-                writer.add_scalar("Loss/Entropy", entropy.item(), global_step) 
-                writer.add_scalar("Grad/Actor", get_gradient_norm(self.policy), global_step)
-
-                for idx, val in enumerate(values):
-                    writer.add_scalar(f"Value/Q{idx+1}", val, global_step)
+            logs['actor_loss'] = actor_loss.item()
+            logs['entropy'] = entropy.item()
+            logs['actor_grad_norm'] = get_gradient_norm(self.policy)
 
             self.policy_optimizer.step()
+
+        return logs
 
 
 
