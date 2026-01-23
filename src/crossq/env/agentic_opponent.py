@@ -1,0 +1,132 @@
+from typing import Protocol
+import hockey.hockey_env as h_env
+
+import numpy as np
+import torch
+
+import random
+
+from models.actor import GaussianPolicy
+from copy import deepcopy
+
+
+class AgenticOpponent(Protocol):
+
+    def act(self, obs):
+        ...
+
+
+class CrossQOpponent:
+    def __init__(self, actor: GaussianPolicy, device: str = "cpu"):
+        self.actor = actor
+        self.device = device
+
+    def act(self, obs):
+        with torch.no_grad():
+            self.actor.eval()
+            _, _, action = self.actor.get_action(torch.from_numpy(obs).to(torch.float32).to(self.device).unsqueeze(0))
+            self.actor.train()
+            return action.squeeze(0).detach().cpu().numpy()
+    
+
+def construct_crossq_opponent(policy: GaussianPolicy, device: str = "cpu", copy: bool = True):
+    if copy:
+        policy = deepcopy(policy)
+    return CrossQOpponent(actor=policy, device=device)
+    
+
+class OpponentPool:
+    def __init__(self, latest_agent: AgenticOpponent, 
+                 latest_agent_score: float,
+                  window_size: int,
+                 play_against_latest_model_ratio: float):
+                 
+        self.window_size = window_size
+        self.play_against_latest_model_ratio = play_against_latest_model_ratio
+        self.opponent_pool: list[AgenticOpponent] = list()
+        self.score_pool: list[float] = list()
+        self.latest_agent = latest_agent  #  this is the same as the agent being trained
+        self.latest_agent_score = latest_agent_score
+        self.using_latest_agent = True
+        self.current_agent_idx = -1
+        
+    def add_agent(self, agent:AgenticOpponent, score: float) -> None:
+        if len(self.opponent_pool) == self.window_size:
+            self.opponent_pool.pop(0)
+            self.score_pool.pop(0)
+        self.score_pool.append(score)
+        self.opponent_pool.append(agent)
+
+    def update_opponent_score(self, new_score) -> None:
+        if self.using_latest_agent:
+            self.latest_agent_score = new_score
+        else:
+            self.score_pool[self.current_agent_idx] = new_score
+
+    def get_opponent_score(self) -> float:
+        if self.using_latest_agent:
+            return self.latest_agent_score
+        else:
+            return self.score_pool[self.current_agent_idx]
+
+    def sample_opponent(self) -> AgenticOpponent:
+        if random.random() <= self.play_against_latest_model_ratio:
+            self.using_latest_agent = True
+            return self.latest_agent  
+        else:
+            try:
+                idx = random.choice(list(range(len(self.opponent_pool))))
+                self.using_latest_agent = False
+                self.current_agent_idx = idx
+                return self.opponent_pool[idx]
+            except IndexError:
+                self.using_latest_agent = True
+                return self.latest_agent
+            
+
+class HockeyEnv_AgenticOpponent(h_env.HockeyEnv):
+    def __init__(self, opponent: AgenticOpponent, 
+                 mode=h_env.Mode.NORMAL):
+        super().__init__(mode=mode, keep_mode=True)
+        self.opponent = opponent
+
+    def step(self, action):
+        ob2 = self.obs_agent_two()
+        a2 = self.opponent.act(ob2)
+        action2 = np.hstack([action, a2])
+        return super().step(action2)
+
+
+class HockeyEnv_SelfPlay(h_env.HockeyEnv):
+    def __init__(self, agent: AgenticOpponent, 
+                 mode=h_env.Mode.NORMAL, window_size: int = 10,
+                 play_against_latest_model_ratio: float = .5,
+                 default_score: float = 1200.0,
+                 ):
+        super().__init__(mode=mode, keep_mode=True)
+        self.default_score = default_score
+        self._agent = agent
+        self.pool = OpponentPool(latest_agent=agent, latest_agent_score=default_score,
+                                  window_size=window_size, play_against_latest_model_ratio=play_against_latest_model_ratio)
+        self.opponent = self.pool.sample_opponent()
+
+    def add_agent(self, agent: AgenticOpponent, score: float | None = None) -> None:
+        self.pool.add_agent(agent, score=score if score else self.default_score)
+
+    def swap_agent(self) -> None:
+        self.opponent = self.pool.sample_opponent()
+
+    def get_opponent_score(self) -> float:
+        return self.pool.get_opponent_score()
+
+    def update_opponent_score(self, new_score: float) -> None:
+        self.pool.update_opponent_score(new_score=new_score)
+
+    def step(self, action):
+        ob2 = self.obs_agent_two()
+        a2 = self.opponent.act(ob2)
+        action2 = np.hstack([action, a2])
+
+        return super().step(action2)
+    
+
