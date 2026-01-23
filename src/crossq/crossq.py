@@ -95,7 +95,7 @@ class CrossQAgentConfig:
     q_lr: float = 1e-3
 
     batch_size: int = 256
-    device: str = "mps"
+    device: str = "cuda"
 
     adam_beta1: float = .5
     adam_beta2: float = .999

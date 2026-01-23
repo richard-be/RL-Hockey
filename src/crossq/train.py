@@ -45,7 +45,6 @@ class EnvConfig:
 
 @dataclass
 class CrossQConfig:
-    run_name: str = ""
     env: EnvConfig = field(default_factory=EnvConfig)
     agent_config: CrossQAgentConfig = field(default_factory=CrossQAgentConfig)
     
@@ -54,9 +53,6 @@ class CrossQConfig:
     save_freq: int = 100_000
     log_freq: int = 100
     eval_freq: int = 50_000
-
-
-    video_path: str = ""
 
     use_tensorboard: bool = True
 
