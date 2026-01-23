@@ -68,6 +68,7 @@ pip install opencv-contrib-python==4.8.0.76 --no-deps
 pip install hydra-core
 pip install tensordict==0.2.1
 pip install torchrl==0.2.1 --no-deps
+pip install moviepy
 pip install Cython
 pip install zarr
 pip install tables
