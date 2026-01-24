@@ -6,7 +6,7 @@ import numpy as np
 import omegaconf
 import torch
 
-import mbrl.algorithms.mbpo as mbpo
+import algorithm.mbpo as mbpo 
 import mbrl.util.env
 from hockey.hockey_env import HockeyEnv
 
@@ -16,14 +16,10 @@ def run(cfg: omegaconf.DictConfig):
     env, term_fn, reward_fn = mbrl.util.env.EnvHandler.make_env(cfg)
     np.random.seed(cfg.seed)
     torch.manual_seed(cfg.seed)
-    # if cfg.algorithm.name == "pets":
-    #     return pets.train(env, term_fn, reward_fn, cfg)
-    if cfg.algorithm.name == "mbpo":
-        test_env, *_ = mbrl.util.env.EnvHandler.make_env(cfg)
-        return mbpo.train(env, test_env, term_fn, cfg)
-    # if cfg.algorithm.name == "planet":
-    #     return planet.train(env, cfg)
-
-
+    
+    assert cfg.algorithm.name == "mbpo"
+    test_env, *_ = mbrl.util.env.EnvHandler.make_env(cfg)
+    return mbpo.train(env, test_env, term_fn, cfg)
+    
 if __name__ == "__main__":
     run()

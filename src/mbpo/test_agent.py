@@ -13,7 +13,33 @@ import pathlib
 from mbrl.types import TransitionBatch
 import time 
 
+from PIL import Image
+
+def create_gif(truth_images, vague_images, out_path, duration=40, loop=0):
+    frames = []
+
+    for truth, vague in zip(truth_images, vague_images):
+        truth = truth.convert("RGBA")
+        vague = vague.convert("RGBA")
+    
+        vague.putalpha(int(0.3 * 255))
+        truth.paste(vague, (0, 0), mask = vague)
+        frames.append(truth)
+
+    frames[0].save(
+        out_path,
+        save_all=True,
+        append_images=frames[1:],
+        duration=duration,
+        loop=loop,
+        disposal=2,
+    )
+
+    print("Saved to", out_path)
+
+
 def eval_model(dynamics_model, state, action, next_state, reward, done, trunc, _info):
+    # NOTE: reward might also be at index 1 => check again!
     state_labels = [
         "x pos player one",
         "y pos player one",
@@ -32,7 +58,8 @@ def eval_model(dynamics_model, state, action, next_state, reward, done, trunc, _
         "x vel puck",
         "y vel puck",
         "time left player has puck",
-        "time left other player has puck"
+        "time left other player has puck",
+        "reward" 
     ]
     tb = TransitionBatch(
         state.reshape(1, -1), 
@@ -44,23 +71,35 @@ def eval_model(dynamics_model, state, action, next_state, reward, done, trunc, _
     )
 
     model_score, _ = dynamics_model.eval_score(tb)
+    uncertainty = model_score.var(dim=0)[0]
     model_score = model_score.mean(dim=0)[0]
-
+    # print("Variance of predictions", uncertainty)
     # if model_score.max() > 10: 
-        # # NOTE: last item of model prediciton is reward => might be out of bounds here
-        # max_err_idx = torch.argsort(model_score, descending=True)[:3]
-        # print([(state_labels[i], model_score[i]) for i in max_err_idx])
+    #     max_err_idx = torch.argsort(model_score, descending=True)[:3]
+    #     print("".join([f"\n\t{(state_labels[i], model_score[i].item(), uncertainty[i].item())}" for i in max_err_idx]))
         # time.sleep(1)
 
+    with torch.no_grad():
+        model_in, target = dynamics_model._process_batch(tb)      
+        output, output_variance = dynamics_model.model.forward(model_in, use_propagation=False)  
+
+    assert dynamics_model.target_is_delta
+    assert len(dynamics_model.no_delta_list) == 0
+
+    pred_output = output.mean(dim=0).reshape(-1).numpy().astype(np.float64)
+    # target is actually detla of state to target, i.e. next_state - state 
+    # => get next state by adding state ([:-1] because reward is predicted at last idx)
+    pred_output = pred_output[:-1] + state 
+    return pred_output
 
 def load_dynamics_model(model_dir, env, cfg,):
     # because the original code uses torch.load without weights_only=True, replace here weights_only=False
     dynamics_model = create_one_dim_tr_model(cfg, env.observation_space.shape, env.action_space.shape)
     # dynamics_model.load(model_directory)
 
-    dynamics_model.model.load_state_dict(torch.load(pathlib.Path(model_dir) / dynamics_model._MODEL_FNAME, weights_only=False)["state_dict"])
+    dynamics_model.model.load_state_dict(torch.load(pathlib.Path(model_dir) / dynamics_model._MODEL_FNAME, weights_only=False, map_location=torch.device('cpu'))["state_dict"])
     if dynamics_model.input_normalizer: 
-        dynamics_model.input_normalizer.load(model_dir)
+        dynamics_model.input_normalizer.load(model_dir) #, map_location=torch.device('cpu'))
     return dynamics_model
 
 def get_latest_run_dir(results_dir):
@@ -71,69 +110,43 @@ def get_latest_run_dir(results_dir):
     dir_most_recent_date = get_highest_folder(results_dir) 
     return get_highest_folder(dir_most_recent_date) if dir_most_recent_date is not None else None
 
-def run_hockey_env(agent, env, dynamics_model, n_episodes, max_timesteps, save_gif, weak_opponent=False): 
+def run_gym_env(agent, env, model_env, dynamics_model, n_episodes, max_timesteps, save_gif, out_dir=None): 
     rewards = []
-    opponent = BasicOpponent(weak=weak_opponent) 
-
-    for ep in range(1, n_episodes+1):
-        ep_reward = 0
-        
-        obs, _ = env.reset()
-        obs_agent2 = env.obs_agent_two()
-
-        for _ in range(max_timesteps):
-            env.render()
-            a1 = agent.act(obs)
-            a2 = opponent.act(obs_agent2)
-
-
-            # print(torch.tensor(np.hstack([obs, a1])).repeat((7, 1)).shape)
-            # model_pred1, model_pred2 = dynamics_model(torch.tensor(np.hstack([obs, a1])).repeat((7, 1)).to(torch.float))
-            # print(model_pred1.shape)
-            # print(model_pred2.shape)
-            obs_old = obs 
-            obs, r, d, t, _ = env.step(a1) #np.hstack([a1,a2]))    
-
-            # tb = TransitionBatch(obs_old, a1, obs, np.array(r), d, t)
-            # dynamics_model.eval_score(tb)
-
-            ep_reward += r
-            obs_agent2 = env.obs_agent_two()
-
-
-            if save_gif:
-                 img = env.render()
-                 img = Image.fromarray(img)
-                 img.save(f'./gif/{ep:02}-{t:03}.jpg')
-            if d or t: break
-        rewards.append(ep_reward)
-        print('Episode: {}\tReward: {}'.format(ep, int(ep_reward)))
-    return rewards 
-
-
-def run_gym_env(agent, env, dynamics_model, n_episodes, max_timesteps, save_gif): 
-    rewards = []
-
     for ep in range(1, n_episodes+1):
         ep_reward = 0
         state, _info = env.reset()
+        model_env.reset() 
+        pred_state = state 
+        anim = [[], []]
+
         for t in range(max_timesteps):
-            env.render()
+            model_env.set_state(pred_state) 
+
+            # env.render()
+            # model_env.render()
 
             action = agent.act(state)
 
             env_update = env.step(action)
-            eval_model(dynamics_model, state, action, *env_update)
+            pred_state = eval_model(dynamics_model, state, action, *env_update)
+            
             state, reward, done, trunc, _ = env_update
 
             ep_reward += reward
             if save_gif:
-                 img = env.render()
-                 img = Image.fromarray(img)
-                 img.save(f'./gif/{ep:02}-{t:03}.jpg')
+                 for i, e in enumerate((env, model_env)): 
+                    img = e.render(mode="rgb_array")
+                    img = Image.fromarray(img)
+                    anim[i].append(img)
+                    # img.save(f'{GIF_PATH}/{descr}/{ep:02}-{t:03}.jpg')
             if done or trunc: break
+
+        if save_gif: 
+            create_gif(anim[0], anim[1], f"{out_dir}/test_ep{ep}.gif")
+
         rewards.append(ep_reward)
         print('Episode: {}\tReward: {}'.format(ep, int(ep_reward)))
+    
     return rewards 
 
 def test():
@@ -149,7 +162,7 @@ def test():
                          default='latest',
                          help="Specify run (default %default)")
     optParser.add_option('-s', '--render',action='store_true',
-                         default="True",
+                         default="False",
                          dest='render',
                          help='render Environment if given')
     optParser.add_option('-g', '--gif',action='store_true',
@@ -167,15 +180,18 @@ def test():
             print("overwrite render-mode to image")
         render_mode = "rgb_array"
         import os
-        os.makedirs('./gif', exist_ok=True)
+        # os.makedirs(GIF_PATH+"/env", exist_ok=True)
+        # os.makedirs(GIF_PATH+"/model", exist_ok=True)
         print("to get a gif for episode 1 run \"convert -delay 1x30 ./gif/01_* ep01.gif\"")
 
     is_hockey = "Hockey" in opts.env_name
 
     if is_hockey: 
         env = gym.make(env_name)
+        model_env = gym.make(env_name)
     else: 
         env = gym.make(env_name, render_mode = render_mode)
+        model_env = gym.make(env_name, render_mode = render_mode)
     # state_dim = env.observation_space.shape[0]
     # action_dim = env.action_space.shape
     max_timesteps = 300
@@ -193,16 +209,33 @@ def test():
     print(model_directory)
 
     cfg = load_hydra_cfg(model_directory)
+    cfg.device = "cpu"
     agent = SACAgent(SAC(env.observation_space.shape[0], env.action_space, cfg.algorithm.agent.args))
-    agent.sac_agent.load_checkpoint(model_directory+"/sac.pth")
+    load_checkpoint(agent.sac_agent, model_directory+"/sac.pth", evaluate=True)
     dynamics_model = load_dynamics_model(model_directory, env, cfg)
 
-    # if is_hockey: 
-    #     run_hockey_env(agent, env, dynamics_model, n_episodes, max_timesteps, save_gif)
-    # else: 
-    run_gym_env(agent, env, dynamics_model, n_episodes, max_timesteps, save_gif)
-
+    run_gym_env(agent, env, model_env, dynamics_model, n_episodes, max_timesteps, save_gif, model_directory)
     env.close()
+
+
+def load_checkpoint(self, ckpt_path, evaluate=False):
+    print("Loading models from {}".format(ckpt_path))
+    if ckpt_path is not None:
+        checkpoint = torch.load(ckpt_path, map_location=torch.device('cpu'))
+        self.policy.load_state_dict(checkpoint["policy_state_dict"])
+        self.critic.load_state_dict(checkpoint["critic_state_dict"])
+        self.critic_target.load_state_dict(checkpoint["critic_target_state_dict"])
+        self.critic_optim.load_state_dict(checkpoint["critic_optimizer_state_dict"])
+        self.policy_optim.load_state_dict(checkpoint["policy_optimizer_state_dict"])
+
+        if evaluate:
+            self.policy.eval()
+            self.critic.eval()
+            self.critic_target.eval()
+        else:
+            self.policy.train()
+            self.critic.train()
+            self.critic_target.train()
 
 
 if __name__ == '__main__':
