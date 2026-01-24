@@ -107,14 +107,14 @@ def eval(agent: CrossQAgent,
                                       weak_mode=False,
                                       render_mode="rgb_array",
                                       ))
-        defense_env = create_environment(EnvConfig(env_id=env_config.env_id,
-                                      mode=h_env.Mode.TRAIN_DEFENSE,
-                                      render_mode="rgb_array",
-                                      ))
-        shooting_env = create_environment(EnvConfig(env_id=env_config.env_id,
-                                      mode=h_env.Mode.TRAIN_SHOOTING,
-                                      render_mode="rgb_array",
-                                      ))
+        # defense_env = create_environment(EnvConfig(env_id=env_config.env_id,
+        #                               mode=h_env.Mode.TRAIN_DEFENSE,
+        #                               render_mode="rgb_array",
+        #                               ))
+        # shooting_env = create_environment(EnvConfig(env_id=env_config.env_id,
+        #                               mode=h_env.Mode.TRAIN_SHOOTING,
+        #                               render_mode="rgb_array",
+        #                               ))
         selfgame_env = create_environment(EnvConfig(env_id=env_config.env_id,
                                       mode=h_env.Mode.NORMAL,
                                       opponent_type="custom",
@@ -139,11 +139,9 @@ def eval(agent: CrossQAgent,
     for name, env in envs.items():
         observation, info = env.reset()
         while True:
-            print("Step", name)
             action = agent.act(observation).cpu().numpy()
             observation, _, terminated, truncated, info = env.step(action)
             if terminated or truncated:
-                print(f"Closing {name}")
                 writer.add_scalar(f"Eval/Return_{name}", info['episode']['r'], global_step)
                 if is_hockey(env_config.env_id):
                     winner = info['winner']
@@ -272,6 +270,7 @@ def fit_cross_q(config: CrossQConfig):
                 env.unwrapped.add_agent(construct_crossq_opponent(agent.policy, device=config.agent_config.device), elo_score)
             if (step + 1) % config.env.swap_steps == 0:
                 env.unwrapped.swap_agent()
+                observation, info = env.reset()
 
         if (step + 1) % config.eval_freq == 0:
             eval(agent, config.env, writer, step, identifier=identifier)

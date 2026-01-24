@@ -5,6 +5,7 @@ import numpy as np
 import torch
 
 import random
+import gymnasium as gym
 
 from models.actor import GaussianPolicy
 from copy import deepcopy
@@ -23,14 +24,13 @@ class CrossQOpponent:
 
     def act(self, obs):
         with torch.no_grad():
-            self.actor.eval()
             _, _, action = self.actor.get_action(torch.from_numpy(obs).to(torch.float32).to(self.device).unsqueeze(0))
-            self.actor.train()
             return action.squeeze(0).detach().cpu().numpy()
     
 
 def construct_crossq_opponent(policy: GaussianPolicy, device: str = "cpu"):
     policy = deepcopy(policy)
+    policy.eval()
     return CrossQOpponent(actor=policy, device=device)
     
 
@@ -52,6 +52,8 @@ class OpponentPool:
             self.score_pool.pop(0)
         self.score_pool.append(score)
         self.opponent_pool.append(agent)
+        if self.current_agent_idx:
+            self.current_agent_idx -= 1
 
     def update_opponent_score(self, new_score) -> None:
         self.score_pool[self.current_agent_idx] = new_score
@@ -61,8 +63,8 @@ class OpponentPool:
 
     def sample_opponent(self) -> AgenticOpponent:
         if random.random() <= self.play_against_latest_model_ratio:
-            self.current_agent_idx = -1
-            return self.opponent_pool[-1]  
+            self.current_agent_idx = len(self.opponent_pool) - 1
+            return self.opponent_pool[self.current_agent_idx]  
         else:
             idx = random.choice(list(range(len(self.opponent_pool))))
             self.current_agent_idx = idx
@@ -92,10 +94,11 @@ class HockeyEnv_SelfPlay(h_env.HockeyEnv):
         self.default_score = default_score
         self.pool = OpponentPool(latest_agent=agent, latest_agent_score=default_score,
                                   window_size=window_size, play_against_latest_model_ratio=play_against_latest_model_ratio)
+        self.action_space = gym.spaces.Box(-1, +1, (4,), dtype=np.float32)
         self.opponent = self.pool.sample_opponent()
 
     def add_agent(self, agent: AgenticOpponent, score: float | None = None) -> None:
-        self.pool.add_agent(agent, score=score if score is None else self.default_score)
+        self.pool.add_agent(agent, score=score if score is not None else self.default_score)
 
     def swap_agent(self) -> None:
         self.opponent = self.pool.sample_opponent()
@@ -109,6 +112,7 @@ class HockeyEnv_SelfPlay(h_env.HockeyEnv):
     def step(self, action):
         ob2 = self.obs_agent_two()
         a2 = self.opponent.act(ob2)
+        print(a2.shape, action.shape)
         action2 = np.hstack([action, a2])
 
         return super().step(action2)
