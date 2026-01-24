@@ -37,8 +37,8 @@ class EnvConfig:
     # selfplay elements
     play_against_latest_model_ratio: float = .5
     window_size: int = 10
-    swap_steps: int = 10_000
-    opponent_save_steps: int = 20_000
+    swap_steps: int = 100_000
+    opponent_save_steps: int = 50_000
 
     initial_elo: float = 12000.0
     k_factor: int = 16
@@ -48,7 +48,7 @@ class CrossQConfig:
     env: EnvConfig = field(default_factory=EnvConfig)
     agent_config: CrossQAgentConfig = field(default_factory=CrossQAgentConfig)
     
-    train_steps: int = 1_000_000
+    train_steps: int = 1_500_000
     learning_starts: int = 10_000
     save_freq: int = 100_000
     log_freq: int = 100
@@ -188,9 +188,9 @@ def fit_cross_q(config: CrossQConfig):
     running_stats = defaultdict(int)
 
     for _ in range(config.learning_starts):
-        action = agent.act(observation).cpu().numpy()
+        action = env.action_space.sample()
         next_observation, reward, terminated, truncated, info = env.step(action)
-        agent.store_transition(observation, action, next_observation, reward, terminated)
+        agent.store_transition(observation, action, next_observation, reward, terminated or truncated)
 
         observation = next_observation
         if truncated or terminated:
