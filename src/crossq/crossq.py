@@ -108,7 +108,7 @@ class CrossQAgentConfig:
     batch_norm_warmup: int = 100_000
     batchn_norm_momentum: float = .01
 
-    buffer_size: int = 100_000
+    buffer_size: int = 1_000_000
 
 
 class CrossQAgent:

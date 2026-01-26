@@ -37,7 +37,7 @@ class EnvConfig:
     # selfplay elements
     play_against_latest_model_ratio: float = .5
     window_size: int = 10
-    swap_steps: int = 50_000
+    swap_steps: int = 100_000
     opponent_save_steps: int = 30_000
 
     initial_elo: float = 12000.0
@@ -48,7 +48,7 @@ class CrossQConfig:
     env: EnvConfig = field(default_factory=EnvConfig)
     agent_config: CrossQAgentConfig = field(default_factory=CrossQAgentConfig)
     
-    train_steps: int = 1_500_000
+    train_steps: int = 2_000_000
     learning_starts: int = 10_000
     save_freq: int = 100_000
     log_freq: int = 100
