@@ -39,6 +39,8 @@ class Args:
     """the number of parallel game environments"""
     self_play_len: int=5
     """the sliding windows size of versions of the agent himself to train against"""
+    self_play: bool = True
+    """whether to include self play and sampler in training"""
 
     #Algorithm specific arguments
     buffer_size: int = int(1e6)

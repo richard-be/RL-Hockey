@@ -17,13 +17,14 @@ import hockey.hockey_env as h_env
 from env.colored_noise import generate_colored_noise
 import copy
 
-def make_env(seed, episode_count, device, weak_opponent, env_mode="NORMAL", opponent_sampler=None):
+def make_env(seed, episode_count, device, weak_opponent, self_play, env_mode="NORMAL", opponent_sampler=None):
     def thunk():
-        if "opponent_sampler" == None:
+        if not self_play:
             env = c_env.HockeyEnv_Custom_BasicOpponent(env_mode, weak_opponent)
         else:
             env = c_env.HockeyEnv_Custom_CustomOpponent(h_env.BasicOpponent(weak=True), device, mode=h_env.Mode[env_mode]) 
             env = c_env.OpponentResetWrapper(env, opponent_sampler, episode_count)
+     
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env.action_space.seed(seed)
         return env
@@ -31,13 +32,13 @@ def make_env(seed, episode_count, device, weak_opponent, env_mode="NORMAL", oppo
 
 def reset_noise(i, noise, beta, samples, action_shape):
     """
-    Docstring for reset_noise
+    Recreate colored noise arrays
     
     :param i: Description
-    :param noise: Description
-    :param beta: Description
-    :param samples: Description
-    :param action_shape: Description
+    :param noise: old noise array
+    :param beta: noise exponent
+    :param samples: number of samples
+    :param action_shape: shape of one action
     """
     noise[i] = np.array([generate_colored_noise(samples, beta) for _ in range(action_shape)])
     return noise
@@ -65,7 +66,7 @@ if __name__ == "__main__":
     episode_count = c_env.EpisodeCounter()
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.seed + i, episode_count, device, args.weak_opponent, args.env_mode, opponent_sampler) for i in range(args.num_envs)]
+        [make_env(args.seed + i, episode_count, device, args.weak_opponent, args.self_play, args.env_mode, opponent_sampler) for i in range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
