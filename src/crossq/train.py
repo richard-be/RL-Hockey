@@ -36,8 +36,8 @@ class EnvConfig:
 
     # selfplay elements
     play_against_latest_model_ratio: float = .5
-    window_size: int = 10
-    swap_steps: int = 100_000
+    window_size: int = 8
+    swap_steps: int = 60_000
     opponent_save_steps: int = 30_000
 
     initial_elo: float = 12000.0
