@@ -24,7 +24,7 @@
 # here will be your commands for running the script
 
 
-alphas=(0.0 0.1 0.2 0.3)
+alphas=(0.0)
 betas=(0 1 2)
 combinations=()
 for b in "${betas[@]}"; do
@@ -48,7 +48,7 @@ for PARAM in "${combinations[@]}"; do
       --bind $PWD:/workspace \
       $PWD/singularity/images/rl_hockey.simg \
       python3 /workspace/src/sac/run_training.py \
-      --alpha "$alpha" --beta "$beta" --total-timesteps 200000 --track --num-envs 4 --no-weak-opponent --no-self-play
+      --alpha "$alpha" --beta "$beta" --total-timesteps 400000 --track --num-envs 4 --no-weak-opponent --no-self-play
     )
 
     if [[ "$autotune" == "false" ]]; then
