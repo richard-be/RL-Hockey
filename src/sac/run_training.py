@@ -61,7 +61,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-
+    
     opponent_sampler = c_env.OpponentSampler(args.self_play_len)
     episode_count = c_env.EpisodeCounter()
     # env setup
@@ -145,7 +145,10 @@ if __name__ == "__main__":
                 if info is not None:
                     if episode_count.value % 1000 == 0:
                         sps = int(global_step / (time.time() - start_time))
-                        opponent = envs.envs[env_index].get_opponent_name()
+                        if args.self_play:
+                            opponent = envs.envs[env_index].get_opponent_name()
+                        else:
+                            opponent = "weak" if args.weak_opponent else "strong"
                         print(f"episode={episode_count.value}, global_step={global_step}, env={env_index}, winner={info['winner']}, SPS={sps}, opponent={opponent}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
                     if args.track:
                         writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
@@ -230,7 +233,7 @@ if __name__ == "__main__":
                 if args.autotune:
                     writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
 
-            if global_step >= 1e5 and global_step % 1e5 == 0:
+            if global_step >= 1e5 and global_step % 1e5 == 0 and args.self_play:
                 frozen_actor = copy.deepcopy(actor)
                 frozen_actor.eval()
                 for p in frozen_actor.parameters():
