@@ -25,13 +25,15 @@
 
 
 alphas=(0.0)
-betas=(0 1 2)
+betas=(2)
+sigmas=(0.05 0.1 0.2)
 combinations=()
 for b in "${betas[@]}"; do
     for a in "${alphas[@]}"; do
-        combinations+=("$b $a false")
+        for sigma in "${sigmas[@]}"; do
+            combinations+=("$b $a false $sigma")
     done
-    combinations+=("$b $a True")
+    combinations+=("$b $a True 0")
 done
 
 i=0
@@ -39,7 +41,7 @@ gpu_ids=(0 1 2 3)
 max_concurrent=4
 
 for PARAM in "${combinations[@]}"; do
-    read beta alpha autotune <<< "$PARAM"
+    read beta alpha autotune sigma <<< "$PARAM"
     
     export CUDA_VISIBLE_DEVICES="${gpu_ids[i % 4]}"
     i=$((i+1))
@@ -48,7 +50,7 @@ for PARAM in "${combinations[@]}"; do
       --bind $PWD:/workspace \
       $PWD/singularity/images/rl_hockey.simg \
       python3 /workspace/src/sac/run_training.py \
-      --alpha "$alpha" --beta "$beta" --total-timesteps 400000 --track --num-envs 4 --no-weak-opponent --no-self-play
+      --alpha "$alpha" --beta "$beta" --total-timesteps 400000 --track --num-envs 4 --no-weak-opponent --no-self-play --sigma "$sigma"
     )
 
     if [[ "$autotune" == "false" ]]; then
