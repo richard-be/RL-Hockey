@@ -68,5 +68,3 @@ for PARAM in "${combinations[@]}"; do
 done
 wait
 
-
-
