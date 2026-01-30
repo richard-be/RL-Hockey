@@ -32,6 +32,7 @@ for b in "${betas[@]}"; do
     for a in "${alphas[@]}"; do
         for sigma in "${sigmas[@]}"; do
             combinations+=("$b $a false $sigma")
+        done
     done
     combinations+=("$b $a True 0")
 done
