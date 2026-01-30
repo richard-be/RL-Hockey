@@ -233,7 +233,7 @@ if __name__ == "__main__":
                 if args.autotune:
                     writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
 
-            if global_step >= 1e5 and global_step % 1e5 == 0 and args.self_play:
+            if global_step >= 2e5 and global_step % 3e5 == 0 and args.self_play:
                 frozen_actor = copy.deepcopy(actor)
                 frozen_actor.eval()
                 for p in frozen_actor.parameters():
