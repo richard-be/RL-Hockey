@@ -257,7 +257,7 @@ def fit_cross_q(config: CrossQConfig):
             os.makedirs(f"models/crossq/{step + 1}/", exist_ok=True)
             torch.save(agent.state(), f"models/crossq/{step + 1}/model.pkl") 
 
-        if config.env.opponent_type == "selfplay":
+        if is_hockey(config.env.env_id) and config.env.opponent_type == "selfplay":
             if (step + 1) % config.env.opponent_save_steps == 0:
                 env.unwrapped.add_agent(construct_crossq_opponent(agent.policy, device=config.agent_config.device), elo_score)
             if (step + 1) % config.env.swap_steps == 0:
