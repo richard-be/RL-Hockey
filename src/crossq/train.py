@@ -124,7 +124,11 @@ def eval(agent: CrossQAgent,
                                              name_prefix="self_opponent")
                }
     else:
-        env = create_environment(env_config)
+        env = create_environment(EnvConfig(env_id=env_config.env_id,
+                                      mode=env_config.mode,
+                                      opponent_type=env_config.opponent_type,
+                                      render_mode="rgb_array",
+                                      ))
         env = RecordVideo(env, episode_trigger=lambda _: True, video_folder=f"videos/crossq/{identifier}/{global_step}", 
                                              name_prefix="eval")
         envs = {"basic": env}
