@@ -125,7 +125,8 @@ def eval(agent: CrossQAgent,
                }
     else:
         env = create_environment(env_config)
-        env = RecordVideo(env)
+        env = RecordVideo(env, episode_trigger=lambda _: True, video_folder=f"videos/crossq/{identifier}/{global_step}", 
+                                             name_prefix="eval")
         envs = {"basic": env}
         
     
@@ -170,7 +171,7 @@ def fit_cross_q(config: CrossQConfig):
         elo_score = config.env.initial_elo
         env: HockeyEnv_SelfPlay = create_environment(config.env, custom_opponent=construct_crossq_opponent(agent.policy, device=config.agent_config.device))
 
-    identifier = f"CrossQ-{config.env.opponent_type}-{config.env.env_id}-{config.seed}-{int(time.time())}"
+    identifier = f"CrossQ-{config.env.opponent_type}-{config.env.env_id}-{config.seed}-{int(time.time())}-{config.agent_config.q_lr}-{config.agent_config.buffer_size}"
     if config.use_tensorboard:
         
         writer = SummaryWriter(log_dir=f"runs/crossq/{identifier}")
