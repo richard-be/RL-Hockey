@@ -105,10 +105,10 @@ class CrossQAgentConfig:
     q_hidden_dim: int = 2048
     policy_hidden_dim: int = 256
     batch_norm_type: str = "BRN"
-    batch_norm_warmup: int = 500_000
+    batch_norm_warmup: int = 100_000
     batchn_norm_momentum: float = .01
 
-    buffer_size: int = 300_000
+    buffer_size: int = 1_000_000
 
 
 class CrossQAgent:

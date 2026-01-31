@@ -27,7 +27,7 @@ class BatchRenorm1d(nn.Module):
         momentum (:obj:`float`, optional): Momentum factor for computing the running mean and variance.
             Defaults to ``0.01``.
         eps (:obj:`float`, optional): Small value added to the variance to avoid division by zero.
-            Defaults to ``1e-5``.
+            Defaults to ``1e-3``.
         max_r (:obj:`float`, optional): Maximum value for the scaling factor r.
             Defaults to ``3.0``.
         max_d (:obj:`float`, optional): Maximum value for the bias factor d.
@@ -45,7 +45,7 @@ class BatchRenorm1d(nn.Module):
         num_features: int,
         *,
         momentum: float = 0.01,
-        eps: float = 1e-5,
+        eps: float = 1e-3,
         max_r: float = 3.0,
         max_d: float = 5.0,
         warmup_steps: int = 10000,
@@ -86,7 +86,7 @@ class BatchRenorm1d(nn.Module):
         if self.training:
             reduce_dims = [i for i in range(x.dim()) if i != 1]
             b_mean = x.mean(reduce_dims)
-            b_var = x.var(reduce_dims, unbiased=False)
+            b_var = x.var(reduce_dims)
             b_std = (b_var + self.eps).sqrt_()
 
             r = torch.clamp((b_std.detach() / running_std), 1 / self.max_r, self.max_r)
@@ -107,8 +107,7 @@ class BatchRenorm1d(nn.Module):
 
             x = (x - _v(b_mean)) / _v(b_std) * _v(r) + _v(d)
 
-            unbiased_var = b_var.detach() * x.shape[0] / (x.shape[0] - 1)
-            self.running_var += self.momentum * (unbiased_var - self.running_var)
+            self.running_var += self.momentum * (b_var.detach() - self.running_var)
             self.running_mean += self.momentum * (b_mean.detach() - self.running_mean)
             self.num_batches_tracked += 1
             self.num_batches_tracked.clamp_max(self.warmup_steps)

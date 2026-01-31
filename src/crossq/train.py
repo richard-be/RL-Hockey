@@ -36,7 +36,7 @@ class EnvConfig:
 
     # selfplay elements
     play_against_latest_model_ratio: float = .5
-    window_size: int = 8
+    window_size: int = 10
     swap_steps: int = 60_000
     opponent_save_steps: int = 30_000
 
@@ -107,14 +107,7 @@ def eval(agent: CrossQAgent,
                                       weak_mode=False,
                                       render_mode="rgb_array",
                                       ))
-        # defense_env = create_environment(EnvConfig(env_id=env_config.env_id,
-        #                               mode=h_env.Mode.TRAIN_DEFENSE,
-        #                               render_mode="rgb_array",
-        #                               ))
-        # shooting_env = create_environment(EnvConfig(env_id=env_config.env_id,
-        #                               mode=h_env.Mode.TRAIN_SHOOTING,
-        #                               render_mode="rgb_array",
-        #                               ))
+  
         selfgame_env = create_environment(EnvConfig(env_id=env_config.env_id,
                                       mode=h_env.Mode.NORMAL,
                                       opponent_type="custom",
@@ -134,6 +127,7 @@ def eval(agent: CrossQAgent,
         env = create_environment(env_config)
         env = RecordVideo(env)
         envs = {"basic": env}
+        
     
     
     for name, env in envs.items():
@@ -181,9 +175,9 @@ def fit_cross_q(config: CrossQConfig):
         
         writer = SummaryWriter(log_dir=f"runs/crossq/{identifier}")
         
+    env.seed(config.seed)
 
-
-    observation, info = env.reset(seed=config.seed)
+    observation, info = env.reset()
     num_episodes = 0
     running_stats = defaultdict(int)
 
