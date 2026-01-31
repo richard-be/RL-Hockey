@@ -174,10 +174,8 @@ def fit_cross_q(config: CrossQConfig):
     if config.use_tensorboard:
         
         writer = SummaryWriter(log_dir=f"runs/crossq/{identifier}")
-        
-    env.seed(config.seed)
 
-    observation, info = env.reset()
+    observation, info = env.reset(seed=config.seed)
     num_episodes = 0
     running_stats = defaultdict(int)
 
