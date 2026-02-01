@@ -49,7 +49,7 @@ class FeedForward(nn.Module):
             layers.append(deepcopy(norm_layer))
 
 
-        layers.append([nn.Linear(config.input_dim, config.hidden_dim), config.act_func])
+        layers.extend([nn.Linear(config.input_dim, config.hidden_dim), config.act_func])
 
         if config.use_normalization:
             layers.append(deepcopy(norm_layer))
