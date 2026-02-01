@@ -110,7 +110,7 @@ class BatchRenorm1d(nn.Module):
             self.running_var += self.momentum * (b_var.detach() - self.running_var)
             self.running_mean += self.momentum * (b_mean.detach() - self.running_mean)
             self.num_batches_tracked += 1
-            self.num_batches_tracked.clamp_max(self.warmup_steps)
+            self.num_batches_tracked = self.num_batches_tracked.clamp_max(self.warmup_steps)
         else:
             x = (x - _v(self.running_mean)) / _v(running_std)
 
