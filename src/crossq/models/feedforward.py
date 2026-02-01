@@ -34,9 +34,9 @@ class FeedForward(nn.Module):
                         *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-
+        layers = []
         # Construct Input layer
-        layers = [nn.Linear(config.input_dim, config.hidden_dim), config.act_func]
+       
 
         if config.use_normalization:
             if config.normalization_config.type == "BN":
@@ -46,6 +46,12 @@ class FeedForward(nn.Module):
                 norm_layer = BatchRenorm1d(num_features=config.hidden_dim,
                                                            momentum=config.normalization_config.momentum,
                                                            warmup_steps=config.normalization_config.warmup_steps)
+            layers.append(deepcopy(norm_layer))
+
+
+        layers.append([nn.Linear(config.input_dim, config.hidden_dim), config.act_func])
+
+        if config.use_normalization:
             layers.append(deepcopy(norm_layer))
      
         for _ in range(config.num_hidden_layers):
