@@ -40,18 +40,27 @@ class FeedForward(nn.Module):
 
         if config.use_normalization:
             if config.normalization_config.type == "BN":
+                input_norm_layer = nn.BatchNorm1d(num_features=config.input_dim,
+                                            momentum=config.normalization_config.momentum)
+            else:
+                input_norm_layer = BatchRenorm1d(num_features=config.input_dim,
+                                                           momentum=config.normalization_config.momentum,
+                                                           warmup_steps=config.normalization_config.warmup_steps)
+            layers.append(deepcopy(input_norm_layer))
+        
+
+        layers.extend([nn.Linear(config.input_dim, config.hidden_dim), config.act_func])
+
+        
+
+        if config.use_normalization:
+            if config.normalization_config.type == "BN":
                 norm_layer = nn.BatchNorm1d(num_features=config.hidden_dim,
                                             momentum=config.normalization_config.momentum)
             else:
                 norm_layer = BatchRenorm1d(num_features=config.hidden_dim,
                                                            momentum=config.normalization_config.momentum,
                                                            warmup_steps=config.normalization_config.warmup_steps)
-            layers.append(deepcopy(norm_layer))
-
-
-        layers.extend([nn.Linear(config.input_dim, config.hidden_dim), config.act_func])
-
-        if config.use_normalization:
             layers.append(deepcopy(norm_layer))
      
         for _ in range(config.num_hidden_layers):
