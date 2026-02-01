@@ -86,7 +86,7 @@ class BatchRenorm1d(nn.Module):
         if self.training:
             reduce_dims = [i for i in range(x.dim()) if i != 1]
             b_mean = x.mean(reduce_dims)
-            b_var = x.var(reduce_dims)
+            b_var = x.var(reduce_dims, unbiased=False)
             b_std = (b_var + self.eps).sqrt_()
 
             r = torch.clamp((b_std.detach() / running_std), 1 / self.max_r, self.max_r)
