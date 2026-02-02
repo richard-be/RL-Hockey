@@ -26,7 +26,7 @@
 
 alphas=(0.0)
 betas=(2)
-sigmas=(0.05)
+sigmas=(0.01 0.02 0.05)
 combinations=()
 for b in "${betas[@]}"; do
     for a in "${alphas[@]}"; do
@@ -51,7 +51,7 @@ for PARAM in "${combinations[@]}"; do
       --bind $PWD:/workspace \
       $PWD/singularity/images/rl_hockey.simg \
       python3 /workspace/src/sac/run_training.py \
-      --alpha "$alpha" --beta "$beta" --total-timesteps 400000 --track --num-envs 4 --no-weak-opponent --no-self-play --sigma "$sigma"
+      --alpha "$alpha" --beta "$beta" --total-timesteps 100000 --track --num-envs 4 --no-weak-opponent --no-self-play --sigma "$sigma"
     )
 
     if [[ "$autotune" == "false" ]]; then

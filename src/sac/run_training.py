@@ -143,7 +143,7 @@ if __name__ == "__main__":
         if "final_info" in infos:
             for env_index, info in enumerate(infos["final_info"]):
                 if info is not None:
-                    if episode_count.value % 1000 == 0:
+                    if episode_count.value % 50 == 0:
                         sps = int(global_step / (time.time() - start_time))
                         if args.self_play:
                             opponent = envs.envs[env_index].get_opponent_name()
@@ -180,9 +180,9 @@ if __name__ == "__main__":
                 qf_loss = 0
                 q_values_list = []
                 for q in q_networks:
-                    qf_values = q[data.observations, data.actions].view(-1)
+                    qf_values = q(data.observations, data.actions).view(-1)
                     qf_loss += F.mse_loss(qf_values, next_q_value)
-                    q_values_list.append(qf_values.mean().item)
+                    q_values_list.append(qf_values.mean().item())
 
                 # optimize the model
                 q_optimizer.zero_grad()
@@ -196,7 +196,7 @@ if __name__ == "__main__":
                             target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
 
                 if global_step % 100 == 0 and args.track:
-                    writer.add_scalar("losses/qf_values", np.mean(q_values_list).item(), global_step)
+                    writer.add_scalar("losses/qf_values", np.mean(q_values_list), global_step)
                     writer.add_scalar("losses/qf_loss", qf_loss.item() / args.num_q, global_step)
                     writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
                     writer.add_scalar("losses/alpha", alpha, global_step)
@@ -210,7 +210,7 @@ if __name__ == "__main__":
             if global_step % args.policy_frequency == 0:  # TD 3 Delayed update support
                 for _ in range(args.policy_frequency):  # compensate for the delay by doing 'actor_update_interval' instead of 1
                     pi, log_pi, _ = actor.get_action(data.observations)
-                    q_pi = torch.stack([q(data.observations, pi) for q in q_targets], dim=0)
+                    q_pi = torch.stack([q(data.observations, pi) for q in q_networks], dim=0)
                     actor_loss = ((alpha * log_pi) - torch.mean(q_pi, dim=0)).mean()
 
                     actor_optimizer.zero_grad()
