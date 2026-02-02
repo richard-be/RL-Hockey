@@ -58,7 +58,7 @@ for PARAM in "${combinations[@]}"; do
         cmd+=(--no-autotune)
     fi
 
-    echo "Running experiment: alpha=$alpha beta=$beta autotune=$autotune"
+    echo "Running experiment: alpha=$alpha beta=$beta autotune=$autotune sigma=$sigma"
     "${cmd[@]}" &
 
     # throttle: wait every 4 jobs
