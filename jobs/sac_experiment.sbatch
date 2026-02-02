@@ -26,7 +26,7 @@
 
 alphas=(0.0)
 betas=(2)
-sigmas=(0.05 0.1 0.2)
+sigmas=(0.05)
 combinations=()
 for b in "${betas[@]}"; do
     for a in "${alphas[@]}"; do
