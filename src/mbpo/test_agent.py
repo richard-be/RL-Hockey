@@ -70,9 +70,7 @@ def eval_model(dynamics_model, state, action, next_state, reward, done, trunc, _
         np.array([trunc]),
     )
 
-    model_score, _ = dynamics_model.eval_score(tb)
-    uncertainty = model_score.var(dim=0)[0]
-    model_score = model_score.mean(dim=0)[0]
+    # model_score, _ = dynamics_model.eval_score(tb)
     # print("Variance of predictions", uncertainty)
     # if model_score.max() > 10: 
     #     max_err_idx = torch.argsort(model_score, descending=True)[:3]
@@ -87,9 +85,26 @@ def eval_model(dynamics_model, state, action, next_state, reward, done, trunc, _
     assert len(dynamics_model.no_delta_list) == 0
 
     pred_output = output.mean(dim=0).reshape(-1).numpy().astype(np.float64)
+
     # target is actually detla of state to target, i.e. next_state - state 
     # => get next state by adding state ([:-1] because reward is predicted at last idx)
     pred_output = pred_output[:-1] + state 
+
+    # output_variance.shape: [7, 1, 19]
+    # ! output variance is actually log variance !
+    aleatoric_uncertainty = torch.exp(output_variance).mean()
+    # output.var(dim=0).shape [1, 19]
+    epistemic_uncertainty = output.var(dim=0).mean()
+    # print("aleatoric uncertainty", aleatoric_uncertainty)
+    # print("epistemic uncertainty", epistemic_uncertainty)
+
+
+    # TODO: consider using ModelEvn instead of second env? 
+    #  mbrl.models.ModelEnv(
+    #     env, dynamics_model, termination_fn, None, generator=torch_generator
+    # )
+
+
     return pred_output
 
 def load_dynamics_model(model_dir, env, cfg,):
@@ -121,9 +136,9 @@ def run_gym_env(agent, env, model_env, dynamics_model, n_episodes, max_timesteps
 
         for t in range(max_timesteps):
             model_env.set_state(pred_state) 
-
-            # env.render()
-            # model_env.render()
+            if not save_gif:
+                env.render()
+                # model_env.render()
 
             action = agent.act(state)
 

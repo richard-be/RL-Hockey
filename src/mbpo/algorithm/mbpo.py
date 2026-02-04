@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import os
-from typing import Optional, Sequence, cast
+from typing import Optional, Sequence, cast, Dict, Tuple
 
 import gymnasium as gym
 import hydra.utils
@@ -21,12 +21,16 @@ import mbrl.util.common
 import mbrl.util.math
 from mbrl.planning.sac_wrapper import SACAgent
 from mbrl.third_party.pytorch_sac import VideoRecorder
+from omegaconf import OmegaConf
+
+# NOTE: replaced here! 
+from .re_implementations import model_env_sample
+from .custom_sac import SAC
 
 MBPO_LOG_FORMAT = mbrl.constants.EVAL_LOG_FORMAT + [
     ("epoch", "E", "int"),
     ("rollout_length", "RL", "int"),
 ]
-
 
 def rollout_model_and_populate_sac_buffer(
     model_env: mbrl.models.ModelEnv,
@@ -36,6 +40,7 @@ def rollout_model_and_populate_sac_buffer(
     sac_samples_action: bool,
     rollout_horizon: int,
     batch_size: int,
+    hparams: dict, 
 ):
     batch = replay_buffer.sample(batch_size)
     initial_obs, *_ = cast(mbrl.types.TransitionBatch, batch).astuple()
@@ -45,12 +50,46 @@ def rollout_model_and_populate_sac_buffer(
     )
     accum_dones = np.zeros(initial_obs.shape[0], dtype=bool)
     obs = initial_obs
+    print("rollout horizon:", rollout_horizon)
+
+    n_rejected_predictions = 0
+    stats_alea_uncertainties = [] 
+    stats_epis_uncertainties = [] 
+
+    factor_epist_uncert_reward_bonus = hparams.get("factor_epist_uncert_rw_bonus", 0)
+    clip_epist_uncert_min, clip_epist_uncert_max = hparams.get("epist_uncert_clip_range", (0, 5))
+    max_alea_uncert = hparams.get("max_alea_uncert", float("inf"))
+
     for i in range(rollout_horizon):
+        # NOTE: could use model's uncertainty here to discard samples 
+        # or terminate individual horizons early where there is uncertainty 
         action = agent.act(obs, sample=sac_samples_action, batched=True)
-        pred_next_obs, pred_rewards, pred_dones, model_state = model_env.step(
-            action, model_state, sample=True
+
+
+        # NOTE: replaced here!
+        # pred_next_obs, pred_rewards, pred_dones, model_state = model_env.step(
+        #     action, model_state, sample=True
+        # )
+        pred_next_obs, pred_rewards, pred_dones, model_state, alea_uncertainties, epist_uncertainties = model_env_sample(
+            model_env.dynamics_model, model_env.termination_fn, model_env._rng, action, model_state, 
         )
+
+        # pred rewards has shape (100000, 1) => unsqueeze uncertainties to add dimension (currently shape (100000))
+        # TODO: potentially clamp uncertainties? 
+        pred_rewards += factor_epist_uncert_reward_bonus * np.clip(epist_uncertainties.unsqueeze(dim=-1).numpy(), a_min=clip_epist_uncert_min, a_max=clip_epist_uncert_max)
+
         truncateds = np.zeros_like(pred_dones, dtype=bool)
+
+        # NOTE: added this: exclude predictions with too high aleatoric uncertainty
+        pred_too_uncertain = alea_uncertainties.numpy() > max_alea_uncert
+        
+        # TODO: log
+        n_rejected_predictions += pred_too_uncertain.sum()
+        stats_alea_uncertainties.append((alea_uncertainties.min(), alea_uncertainties.mean(), alea_uncertainties.max()))
+        stats_epis_uncertainties.append((epist_uncertainties.min(), epist_uncertainties.mean(), epist_uncertainties.max()))
+
+        accum_dones |= pred_too_uncertain
+
         sac_buffer.add_batch(
             obs[~accum_dones],
             action[~accum_dones],
@@ -61,7 +100,7 @@ def rollout_model_and_populate_sac_buffer(
         )
         obs = pred_next_obs
         accum_dones |= pred_dones.squeeze()
-
+    return (n_rejected_predictions, np.mean(stats_alea_uncertainties, axis=0), np.mean(stats_epis_uncertainties, axis=0))
 
 def evaluate(
     env: gym.Env,
@@ -112,6 +151,20 @@ def maybe_replace_sac_buffer(
         return new_buffer
     return sac_buffer
 
+LOGGER_GROUP_UNCERTAINTY = "env_uncertainty"
+UNCERT_LOG_FORMAT = [
+    ("epoch", "E", "int"),
+    ("env_step", "S", "int"),
+    ("n_rejected_predictions", "N_REJ", "int"),
+
+    ("alea_uncert_min", "U_ALE_MIN", "float"),
+    ("alea_uncert_mean", "U_ALE_MEAN", "float"),
+    ("alea_uncert_max", "U_ALE_MAX", "float"),
+
+    ("epis_uncert_min", "U_EPI_MIN", "float"),
+    ("epis_uncert_mean", "U_EPI_MEAN", "float"),
+    ("epis_uncert_max", "U_EPI_MAX", "float"),
+]
 
 def train(
     env: gym.Env,
@@ -127,9 +180,13 @@ def train(
     act_shape = env.action_space.shape
 
     mbrl.planning.complete_agent_cfg(env, cfg.algorithm.agent)
-    agent = SACAgent(
-        cast(pytorch_sac_pranz24.SAC, hydra.utils.instantiate(cfg.algorithm.agent))
-    )
+
+    cfg_resolved = OmegaConf.create(OmegaConf.to_container(cfg, resolve=True))
+
+    agent = SACAgent(SAC(obs_shape[0], env.action_space, cfg_resolved.algorithm.agent.args))
+    
+        # cast(SAC, hydra.utils.instantiate(cfg.algorithm.agent))
+    # )
 
     work_dir = work_dir or os.getcwd()
     # enable_back_compatible to use pytorch_sac agent
@@ -140,6 +197,14 @@ def train(
         color="green",
         dump_frequency=1,
     )
+
+    logger.register_group(
+        LOGGER_GROUP_UNCERTAINTY,
+        UNCERT_LOG_FORMAT,
+        color="green",
+        dump_frequency=1,
+    )
+
     save_video = cfg.get("save_video", False)
     video_recorder = VideoRecorder(work_dir if save_video else None)
 
@@ -213,6 +278,7 @@ def train(
                 terminated = False
                 truncated = False
             # --- Doing env step and adding to model dataset ---
+            # NOTE: could explore here? 
             (
                 next_obs,
                 reward,
@@ -235,7 +301,7 @@ def train(
 
                 # --------- Rollout new model and store imagined trajectories --------
                 # Batch all rollouts for the next freq_train_model steps together
-                rollout_model_and_populate_sac_buffer(
+                n_rejected_predictions, stats_alea_uncertainties, stats_epis_uncertainties  = rollout_model_and_populate_sac_buffer(
                     model_env,
                     replay_buffer,
                     agent,
@@ -243,7 +309,21 @@ def train(
                     cfg.algorithm.sac_samples_action,
                     rollout_length,
                     rollout_batch_size,
+                    cfg.overrides.own_hparams if cfg.overrides.own_hparams else dict(),
                 )
+                logger.log_data(
+                    LOGGER_GROUP_UNCERTAINTY,
+                    {
+                        "epoch": epoch,
+                        "env_step": env_steps,
+                        "n_rejected_predictions": n_rejected_predictions,
+                        "alea_uncert_min": stats_alea_uncertainties[0],
+                        "alea_uncert_mean": stats_alea_uncertainties[1],
+                        "alea_uncert_max": stats_alea_uncertainties[2],
+                        "epis_uncert_min": stats_epis_uncertainties[0],
+                        "epis_uncert_mean": stats_epis_uncertainties[1],
+                        "epis_uncert_max": stats_epis_uncertainties[2],
+                    })
 
                 if debug_mode:
                     print(

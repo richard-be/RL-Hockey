@@ -2,13 +2,13 @@ defaults:
   - algorithm: mbpo
   - dynamics_model: gaussian_mlp_ensemble
   - overrides: mbpo_hockey
-  - action_optimizer: cem
+  # - action_optimizer: cem
 
 seed: 0
-device: "cuda:0"
+device: "cpu"
 log_frequency_agent: 1000
 save_video: false
-debug_mode: false
+# debug_mode: true
 
 experiment: default
 
