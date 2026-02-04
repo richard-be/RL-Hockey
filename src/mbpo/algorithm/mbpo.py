@@ -290,7 +290,10 @@ def train(
             )
 
             # --------------- Model Training -----------------
-            if (env_steps + 1) % cfg.overrides.freq_train_model == 0:
+            # if cfg.algorithm.real_data_ratio == 1: 
+            #     print("skipped model training because model data not used")
+
+            if ((env_steps + 1) % cfg.overrides.freq_train_model == 0) and (not cfg.algorithm.real_data_ratio == 1):
                 mbrl.util.common.train_model_and_save_model_and_data(
                     dynamics_model,
                     model_trainer,
