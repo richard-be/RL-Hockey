@@ -9,14 +9,13 @@ from mbrl.planning.sac_wrapper import SACAgent
 from mbrl.third_party.pytorch_sac_pranz24 import SAC
 import numpy as np
 from hockey.hockey_env import BasicOpponent
-import pathlib 
 from mbrl.types import TransitionBatch
 from mbrl.models import ModelEnv
 import time 
 from algorithm.mbpo import model_env_sample
 import imageio
 from PIL import Image, ImageDraw
-from util import get_latest_run_dir
+from util import get_latest_run_dir, load_dynamics_model
 
 def create_gif(truth_images, vague_images, true_rews, pred_rews, alea_uncerts, epist_uncerts, out_path):
     with imageio.get_writer(out_path, fps=20) as writer:
@@ -91,21 +90,6 @@ def create_gif(truth_images, vague_images, true_rews, pred_rews, alea_uncerts, e
 #     # output_variance.shape: [7, 1, 19]
 #     # ! output variance is actually log variance !
 #     return pred_output
-
-def load_dynamics_model(model_dir, env, cfg,):
-    # because the original code uses torch.load without weights_only=True, replace here weights_only=False
-    dynamics_model = create_one_dim_tr_model(cfg, env.observation_space.shape, env.action_space.shape)
-    # dynamics_model.load(model_directory)
-
-    model_weights_path = pathlib.Path(model_dir) / dynamics_model._MODEL_FNAME
-    if not model_weights_path.exists(): 
-        print("Warning: dynamics model weights not found.")
-        return dynamics_model
-    
-    dynamics_model.model.load_state_dict(torch.load(model_weights_path, weights_only=False, map_location=torch.device('cpu'))["state_dict"])
-    if dynamics_model.input_normalizer: 
-        dynamics_model.input_normalizer.load(model_dir) #, map_location=torch.device('cpu'))
-    return dynamics_model
 
 def run_gym_env(agent, env, model_env, dynamics_model, n_episodes, max_timesteps, save_gif, out_dir=None): 
     rewards = []
