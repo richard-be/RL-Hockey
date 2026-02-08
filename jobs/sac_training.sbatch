@@ -28,4 +28,4 @@ singularity exec \
   --bind $PWD:/workspace \
   $PWD/singularity/images/rl_hockey.simg \
   python3 /workspace/src/sac/run_training.py \
-    --total-timesteps 400000 --num-envs 4 --track --sigma 0.01 --beta 2.0 --no-autotune --alpha 0.0 --num-q 2 --update-ratio 1 --no-weak-opponent --no-self-play
+    --total-timesteps 400000 --num-envs 4 --track --sigma 0.01 --beta 2.0 --no-autotune --alpha 0.0 --num-q 2 --update-ratio 1 
