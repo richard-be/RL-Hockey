@@ -4,6 +4,9 @@ from copy import deepcopy
 
 from models.batchrenorm import BatchRenorm1d
 
+from collections import OrderedDict
+
+
 
 @dataclass
 class NormalizationConfig:
@@ -46,10 +49,10 @@ class FeedForward(nn.Module):
                 input_norm_layer = BatchRenorm1d(num_features=config.input_dim,
                                                            momentum=config.normalization_config.momentum,
                                                            warmup_steps=config.normalization_config.warmup_steps)
-            layers.append(deepcopy(input_norm_layer))
+            layers.append(("batchnorm0", deepcopy(input_norm_layer)))
         
 
-        layers.extend([nn.Linear(config.input_dim, config.hidden_dim), config.act_func])
+        layers.extend([("dense0", nn.Linear(config.input_dim, config.hidden_dim)), ("act0", config.act_func)])
 
         
 
@@ -61,15 +64,15 @@ class FeedForward(nn.Module):
                 norm_layer = BatchRenorm1d(num_features=config.hidden_dim,
                                                            momentum=config.normalization_config.momentum,
                                                            warmup_steps=config.normalization_config.warmup_steps)
-            layers.append(deepcopy(norm_layer))
+            layers.append(("batchnorm1", deepcopy(norm_layer)))
      
-        for _ in range(config.num_hidden_layers):
-            layers.append(nn.Linear(config.hidden_dim, config.hidden_dim))
-            layers.append(config.act_func)
+        for idx in range(config.num_hidden_layers):
+            layers.append((f"dense{idx + 1}", nn.Linear(config.hidden_dim, config.hidden_dim)))
+            layers.append((f"act{idx + 1}", deepcopy(config.act_func)))
             if config.use_normalization:
-                layers.append(deepcopy(norm_layer))
+                layers.append((f"batchnorm{idx + 2}", deepcopy(norm_layer)))
 
-        self.body = nn.Sequential(*layers)
+        self.body = nn.Sequential(OrderedDict(layers))
 
 
         # add output layer(s)
@@ -79,7 +82,7 @@ class FeedForward(nn.Module):
             fc_out = nn.Linear(config.hidden_dim, out_dim)
 
             if config.output_act:
-                out_act = config.output_act[idx] if isinstance(config.output_act, list) else config.output_act
+                out_act = config.output_act[idx] if isinstance(config.output_act, list) else deepcopy(config.output_act)
 
                 if not out_act:
                     output_layers.append(fc_out)
