@@ -16,7 +16,7 @@ def register_relu_hooks(model: torch.nn.Module) -> dict[str, torch.Tensor]:
 
 
 @torch.no_grad()
-def compute_dead_relu_metrics(activations: dict[str, torch.Tensor]):
+def compute_dead_relu_metrics(activations: dict[str, torch.Tensor]) -> dict[str, dict[str, float]]:
     stats = {}
     for name, act in activations.items():
 
@@ -24,4 +24,5 @@ def compute_dead_relu_metrics(activations: dict[str, torch.Tensor]):
         dead = (act == 0).all(dim=0).sum().item()
 
         stats[name] = {"total": total, "dead": dead, "dead_ratio": dead / total}
+    return stats
         
