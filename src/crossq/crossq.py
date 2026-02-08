@@ -269,10 +269,10 @@ class CrossQAgent:
             critic_loss = compute_critic_loss(self.q_functions, self.policy, alpha, self.config.discount_factor,
                                             observation, action, reward, next_observation, is_terminal, q_targets= self.q_target_functions if self.config.target else None)
             
-
+            snapshots = []
             for q_func in self.q_functions:
-                snapshots = parameter_snapshot(q_func, [layer_name for layer_name in dict(q_func.named_parameters()).keys() if 
-                                                        ("dense" in layer_name or "output_layers" in layer_name) and "weight" in layer_name])
+                snapshots.append(parameter_snapshot(q_func, [layer_name for layer_name in dict(q_func.named_parameters()).keys() if 
+                                                        ("dense" in layer_name or "output_layers" in layer_name) and "weight" in layer_name]))
             self.q_optimizer.zero_grad()
             critic_loss.backward()
 
