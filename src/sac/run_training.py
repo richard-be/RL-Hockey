@@ -135,7 +135,6 @@ if __name__ == "__main__":
         for env_index, done in enumerate(terminations):
             if done:
                 episode_count.increment()
-                print(episode_count)
                 #reset episode steps and noise for finished env
                 episode_steps[env_index] = 0  
                 noise = reset_noise(env_index, noise, args.beta, samples, envs.single_action_space.shape[0])
