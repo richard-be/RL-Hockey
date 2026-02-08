@@ -20,10 +20,8 @@ def compute_dead_relu_metrics(activations: dict[str, torch.Tensor]):
     stats = {}
     for name, act in activations.items():
 
-        act_flat = act.view(act.shape[0], act.shape[1], -1)  # shape should be (batch_size, hidden_dim, 1)
+        total = act.shape[1]
+        dead = (act == 0).all(dim=0).sum().item()
 
-        total = act_flat.shape[1]
-        dead = (act_flat == 0).all(dim=(0, 2)).sum().item()
-
-        stats[name] = {"total": total, "dead": dead, "dead_ratio": dead / float(total)}
+        stats[name] = {"total": total, "dead": dead, "dead_ratio": dead / total}
         
