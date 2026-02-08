@@ -4,11 +4,13 @@ from torch import optim
 import numpy as np
 
 
-from torch.utils.tensorboard import SummaryWriter
 
 from models.critic import QNetwork
 from models.actor import GaussianPolicy, GaussianPolicyConfig
 from models.feedforward import NNConfig, NormalizationConfig, get_gradient_norm
+
+from utils.elr import parameter_snapshot, measaure_effecitve_learning_rate
+from utils.hooks import register_relu_hooks, compute_dead_relu_metrics
 
 from memory import Memory
 
@@ -19,7 +21,8 @@ from dataclasses import dataclass
 def compute_critic_loss(q_functions: list[QNetwork], policy: GaussianPolicy, alpha: float, gamma: float,
                         observations: torch.Tensor, 
                         actions: torch.Tensor, 
-                        rewards: torch.Tensor, next_observations: torch.Tensor, finished: torch.Tensor) -> torch.Tensor:
+                        rewards: torch.Tensor, next_observations: torch.Tensor, finished: torch.Tensor, 
+                        q_targets: list[QNetwork] | None = None) -> torch.Tensor:
         
     with torch.no_grad():
         policy.eval()
@@ -32,11 +35,17 @@ def compute_critic_loss(q_functions: list[QNetwork], policy: GaussianPolicy, alp
     # split into current and next q values (#Q_functions, 2 * Batch_size, 1) -> (#Q_functions, Batch_size, 1), (#Q_functions, Batch_size, 1)
     q, next_q = torch.split(qs, qs.shape[1] // 2, dim=1)
 
-
+    # We also want to compute joint forward pass for target network but only keep next_q
     with torch.no_grad():
+        if q_targets:
+            qs_targets = torch.stack([q_func.q_value(torch.concat([observations, next_observations]), torch.concat([actions, next_actions])) for q_func in q_targets])
+            _, next_q = torch.split(qs_targets, qs_targets.shape[1] // 2, dim=1)
+
+
+    
         next_q = torch.min(next_q, dim=0).values  # (Batch_size, 1)
         next_q = next_q - alpha * log_prob
-        next_q = next_q.squeeze(-1)  # (Batch_size, 1) -> (Batch_size) 
+        next_q = next_q.squeeze(-1)  # (Batch_size, 1) -> (Batch_size, ) 
         target = rewards + gamma * next_q * (1 - finished)  #  rewards and finished have (batch_size) shapes
 
     q = q.squeeze(-1)  # (Batch_size, 1) -> (Batch_size)        
@@ -97,18 +106,28 @@ class CrossQAgentConfig:
     batch_size: int = 256
     device: str = "cuda"
 
-    adam_beta1: float = .5
+    adam_beta1: float = .9
     adam_beta2: float = .999
 
     policy_delay: int = 3
 
-    q_hidden_dim: int = 2048
+    q_hidden_dim: int = 512
     policy_hidden_dim: int = 256
     batch_norm_type: str = "BRN"
     batch_norm_warmup: int = 100_000
     batchn_norm_momentum: float = .01
 
     buffer_size: int = 1_000_000
+
+    target: bool = False  # Target network in CrossQ reintroduced by https://doi.org/10.48550/arXiv.2502.07523
+    tau: float = 5e-3  # Polyak tau for target updates
+
+    utd: int = 1
+
+    weight_norm: bool = False
+    weight_decay: float = 1e-2
+
+    clip_grad: bool = False
 
 
 class CrossQAgent:
@@ -125,12 +144,26 @@ class CrossQAgent:
                                                                      momentum=self.config.batchn_norm_momentum, 
                                                                      warmup_steps=self.config.batch_norm_warmup))
         
+
+        
         policy_config = GaussianPolicyConfig(input_dim=obs_dim, hidden_dim=self.config.policy_hidden_dim, action_dim=action_dim,
                                              normalization_config=NormalizationConfig(type=self.config.batch_norm_type, 
                                                                      momentum=self.config.batchn_norm_momentum, 
                                                                      warmup_steps=self.config.batch_norm_warmup))
 
         self.q_functions = [ QNetwork(config=q_config).to(self.config.device) for _ in range(self.config.q_ensamble)]
+
+
+        self.activations = [register_relu_hooks(q_func) for q_func in self.q_functions]
+
+
+        if config.target:
+            self.q_target_functions = [ QNetwork(config=q_config).to(self.config.device) for _ in range(self.config.q_ensamble)]
+
+            # initialize weights
+            for q_func, q_target in zip(self.q_functions, self.q_target_functions):
+                q_target.load_state_dict(q_func.state_dict())
+
         self.policy = GaussianPolicy(min_action=torch.from_numpy(action_low), max_action=torch.from_numpy(action_high), 
                                      config=policy_config).to(self.config.device)
         
@@ -138,10 +171,18 @@ class CrossQAgent:
         
         self.buffer = Memory(max_size=self.config.buffer_size)
 
+        if config.weight_norm:
+            non_weight_decay_params = [param for q_function in self.q_functions for name, param in q_function.named_parameters() if not ("output_layers" in name and "weight" in name)]
+            weight_decay_params = [param for q_function in self.q_functions for name, param in q_function.output_layers.named_parameters() if "weight" in name]
+            self.q_optimizer = optim.AdamW([{"params": non_weight_decay_params, "weight_decay": 0},
+                                            {"params": weight_decay_params}], lr=self.config.q_lr
+                                        , betas=[self.config.adam_beta1, self.config.adam_beta2], weight_decay=config.weight_decay
+                                        )
 
-        self.q_optimizer = optim.Adam([param for q_function in self.q_functions for param in q_function.parameters()], lr=self.config.q_lr
-                                      , betas=[self.config.adam_beta1, self.config.adam_beta2]
-                                      )
+        else:
+            self.q_optimizer = optim.Adam([param for q_function in self.q_functions for param in q_function.parameters()], lr=self.config.q_lr
+                                        , betas=[self.config.adam_beta1, self.config.adam_beta2]
+                                        )
 
         
         self.policy_optimizer = optim.Adam(list(self.policy.parameters()), lr=self.config.actor_lr
@@ -156,8 +197,11 @@ class CrossQAgent:
             self.log_alpha = nn.Parameter(torch.zeros(1).to(self.config.device))  # we want alpha's value to be positive
             self.alpha_optimizer = optim.Adam([self.log_alpha], lr=self.config.alpha_lr)
 
-        
-        
+    @torch.no_grad()
+    def update_target(self):
+        for q_func, target_q_func in zip(self.q_functions, self.q_target_functions):
+            for q_param, target_param in zip(q_func.parameters(), target_q_func.parameters()):
+                target_param.data.copy_(target_param.data * (1 - self.config.tau ) + self.config.tau * q_param.data)
 
     def store_transition(self, obs: np.array, act: np.array, next_obs: np.array,
                           reward: np.array, is_terminal: np.array) -> None:
@@ -196,61 +240,84 @@ class CrossQAgent:
     
     # TODO: Write somewhere down that it is unstable without gradient clipping
     def learn(self, update_policy: bool) -> dict[str, float]:
-        observation, action, next_observation, reward, is_terminal = self.sample_data(self.config.batch_size)
-
         logs = {}
-
-        if self.config.dynamic_alpha:
-            alpha_loss = compute_alpha_loss(self.policy, self.log_alpha, self.entropy_target, observation)
-
-            self.alpha_optimizer.zero_grad()
-            alpha_loss.backward()
-
-            torch.nn.utils.clip_grad_norm_(self.log_alpha, 1.0)
-
-            logs['alpha_grad_norm'] = self.log_alpha.grad.detach().norm(2).item()
-
-            self.alpha_optimizer.step()
-
-            alpha = torch.exp(self.log_alpha).item()
-
-            logs['alpha_value'] = alpha
-
+        for _ in range(self.config.utd):
+            observation, action, next_observation, reward, is_terminal = self.sample_data(self.config.batch_size)
 
             
-        else:
-            alpha = self.config.alpha
 
-        critic_loss = compute_critic_loss(self.q_functions, self.policy, alpha, self.config.discount_factor,
-                                           observation, action, reward, next_observation, is_terminal)
-        
-        self.q_optimizer.zero_grad()
-        critic_loss.backward()
+            if self.config.dynamic_alpha:
+                alpha_loss = compute_alpha_loss(self.policy, self.log_alpha, self.entropy_target, observation)
 
-        for q_func in self.q_functions:
-            torch.nn.utils.clip_grad_norm_(q_func.parameters(), 1.0)
+                self.alpha_optimizer.zero_grad()
+                alpha_loss.backward()
 
-        logs["critic_loss"] = critic_loss.item()
-        logs["q_grad_norms"] = [get_gradient_norm(q_func) for q_func in self.q_functions]
+                if self.config.clip_grad:
+                    torch.nn.utils.clip_grad_norm_(self.log_alpha, 1.0)
+
+                logs['alpha_grad_norm'] = self.log_alpha.grad.detach().norm(2).item()
+
+                self.alpha_optimizer.step()
+
+                alpha = torch.exp(self.log_alpha).item()
+
+                logs['alpha_value'] = alpha
+                
+            else:
+                alpha = self.config.alpha
+
+            critic_loss = compute_critic_loss(self.q_functions, self.policy, alpha, self.config.discount_factor,
+                                            observation, action, reward, next_observation, is_terminal, q_targets= self.q_target_functions if self.config.target else None)
+            
+
+            for q_func in self.q_functions:
+                snapshots = parameter_snapshot(q_func, [layer_name for layer_name in dict(q_func.named_parameters()).keys() if 
+                                                        ("dense" in layer_name or "output_layers" in layer_name) and "weight" in layer_name])
+            self.q_optimizer.zero_grad()
+            critic_loss.backward()
+
+            if self.config.clip_grad:
+                for q_func in self.q_functions:
+                    torch.nn.utils.clip_grad_norm_(q_func.parameters(), 1.0)
+
+            logs["critic_loss"] = critic_loss.item()
+            logs["q_grad_norms"] = [get_gradient_norm(q_func) for q_func in self.q_functions]
+            logs["q_weight_norms"] = [torch.sum(q_func.get_weight_norms()) for q_func in self.q_functions]
 
 
-        self.q_optimizer.step()
+            self.q_optimizer.step()
 
-        
-        if update_policy:
-            actor_loss, entropy, values = compute_actor_loss(self.q_functions, self.policy, alpha, observation)
-        
-            self.policy_optimizer.zero_grad()
-            actor_loss.backward()
+            relu_stats_list = []
+            elrs_list = []
+            for idx, q_func in enumerate(self.q_functions):
+                elrs = measaure_effecitve_learning_rate(snapshots[idx], q_func)
+                relu_stats = compute_dead_relu_metrics(self.activations[idx])
+                relu_stats_list.append(relu_stats)
+                elrs_list.append(elrs)
+            logs[f"critic_relu_stats"] = relu_stats_list
+            logs[f"critic_elrs"] = elrs_list
 
-            torch.nn.utils.clip_grad_norm_(self.policy.parameters(), 1.0)
+            if self.config.weight_norm:
+                for q_func in self.q_functions:
+                    q_func.normalize_weights_()
 
-            logs['actor_loss'] = actor_loss.item()
-            logs['entropy'] = entropy.item()
-            logs['actor_grad_norm'] = get_gradient_norm(self.policy)
+            
+            if update_policy:
+                actor_loss, entropy, values = compute_actor_loss(self.q_functions, self.policy, alpha, observation)
+            
+                self.policy_optimizer.zero_grad()
+                actor_loss.backward()
+                if self.config.clip_grad:
+                    torch.nn.utils.clip_grad_norm_(self.policy.parameters(), 1.0)
 
-            self.policy_optimizer.step()
+                logs['actor_loss'] = actor_loss.item()
+                logs['entropy'] = entropy.item()
+                logs['actor_grad_norm'] = get_gradient_norm(self.policy)
 
+                self.policy_optimizer.step()
+
+        if self.config.target:
+                self.update_target()
         return logs
 
 

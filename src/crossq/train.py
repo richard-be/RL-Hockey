@@ -56,6 +56,7 @@ class CrossQConfig:
 
     use_tensorboard: bool = True
 
+
     seed: int = 42
 
 
@@ -175,7 +176,7 @@ def fit_cross_q(config: CrossQConfig):
         elo_score = config.env.initial_elo
         env: HockeyEnv_SelfPlay = create_environment(config.env, custom_opponent=construct_crossq_opponent(agent.policy, device=config.agent_config.device))
 
-    identifier = f"CrossQ-{config.env.opponent_type}-{config.env.env_id}-{config.seed}-{int(time.time())}-{config.agent_config.q_lr}-{config.agent_config.buffer_size}"
+    identifier = f"CrossQ-{config.env.opponent_type}-{config.env.env_id}-{config.seed}-{int(time.time())}-{config.agent_config.q_lr}-{config.agent_config.buffer_size}-{config.agent_config.target}-{config.agent_config.batch_norm_type}"
     if config.use_tensorboard:
         
         writer = SummaryWriter(log_dir=f"runs/crossq/{identifier}")
@@ -241,6 +242,8 @@ def fit_cross_q(config: CrossQConfig):
         
         critic_loss = logs["critic_loss"] 
         q_grad_norms = logs["q_grad_norms"]
+        q_relu_stats = logs["critic_relu_stats"] 
+        q_elrs = logs["critic_elrs"] 
 
 
         if (step + 1) % config.log_freq == 0:
@@ -253,6 +256,14 @@ def fit_cross_q(config: CrossQConfig):
             for idx, q_norm in enumerate(q_grad_norms):
                 writer.add_scalar(f"Grad/Q_{idx}", q_norm, step)
 
+            for idx, elrs in enumerate(q_elrs):
+                for name, elr in elrs.items():
+                    writer.add_scalar(f"ELR/Q_{idx}_{name}", elr, step)
+
+            for idx, relu_stats in enumerate(q_relu_stats):
+                for name, relu_stat_dict in relu_stats.items():
+                    writer.add_scalar(f"ReLU/Dead_Q_{idx}_{name}", relu_stat_dict['dead'], step)
+                    writer.add_scalar(f"ReLU/Dead_Ratio_Q_{idx}_{name}", relu_stat_dict['dead_ratio'], step)
 
             writer.add_scalar("Loss/Actor_Loss",  actor_loss, step)   
             writer.add_scalar("Loss/Entropy", entropy, step) 
