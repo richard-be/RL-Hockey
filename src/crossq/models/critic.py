@@ -31,3 +31,4 @@ class QNetwork(FeedForward):
         for name, parameter in self.named_parameters():
             if "dense" in name and "weight" in name:
                 norms.append(torch.norm(parameter, p=2))
+        return torch.tensor(norms)
