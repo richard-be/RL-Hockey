@@ -269,10 +269,10 @@ class CrossQAgent:
             critic_loss = compute_critic_loss(self.q_functions, self.policy, alpha, self.config.discount_factor,
                                             observation, action, reward, next_observation, is_terminal, q_targets= self.q_target_functions if self.config.target else None)
             
-            snapshots = []
-            for q_func in self.q_functions:
-                snapshots.append(parameter_snapshot(q_func, [layer_name for layer_name in dict(q_func.named_parameters()).keys() if 
-                                                        ("dense" in layer_name or "output_layers" in layer_name) and "weight" in layer_name]))
+            # snapshots = []
+            # for q_func in self.q_functions:
+            #     snapshots.append(parameter_snapshot(q_func, [layer_name for layer_name in dict(q_func.named_parameters()).keys() if 
+            #                                             ("dense" in layer_name or "output_layers" in layer_name) and "weight" in layer_name]))
             self.q_optimizer.zero_grad()
             critic_loss.backward()
 
@@ -290,7 +290,8 @@ class CrossQAgent:
             relu_stats_list = []
             elrs_list = []
             for idx, q_func in enumerate(self.q_functions):
-                elrs = measaure_effecitve_learning_rate(snapshots[idx], q_func)
+                elrs = measaure_effecitve_learning_rate(q_func, names=[layer_name for layer_name in dict(q_func.named_parameters()).keys() if 
+                                                        ("dense" in layer_name or "output_layers" in layer_name) and "weight" in layer_name])
                 relu_stats = compute_dead_relu_metrics(self.activations[idx])
                 relu_stats_list.append(relu_stats)
                 elrs_list.append(elrs)
@@ -316,8 +317,8 @@ class CrossQAgent:
 
                 self.policy_optimizer.step()
 
-        if self.config.target:
-                self.update_target()
+            if self.config.target:
+                    self.update_target()
         return logs
 
 
