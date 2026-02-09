@@ -239,7 +239,7 @@ def fit_cross_q(config: CrossQConfig):
             entropy = logs['entropy']
             actor_grad_norm = logs['actor_grad_norm']
 
-        
+        q_weight_norms = logs["q_weight_norms"]
         critic_loss = logs["critic_loss"] 
         q_grad_norms = logs["q_grad_norms"]
         q_relu_stats = logs["critic_relu_stats"] 
@@ -255,6 +255,9 @@ def fit_cross_q(config: CrossQConfig):
             writer.add_scalar("Loss/Q_Loss", critic_loss, step)
             for idx, q_norm in enumerate(q_grad_norms):
                 writer.add_scalar(f"Grad/Q_{idx}", q_norm, step)
+
+            for idx, q_w_norm in enumerate(q_weight_norms):
+                writer.add_scalar(f"Value/Q_{idx}_Weight_Norm", q_w_norm, step)
 
             for idx, elrs in enumerate(q_elrs):
                 for name, elr in elrs.items():
