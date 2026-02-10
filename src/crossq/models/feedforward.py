@@ -72,7 +72,7 @@ class FeedForward(nn.Module):
             layers.append(("batchnorm1", deepcopy(norm_layer)))
      
         for idx in range(config.num_hidden_layers):
-            layers.append((f"dense{idx + 1}", weight_norm(nn.Linear(config.input_dim, config.hidden_dim), dim=None) if config.weight_norm else nn.Linear(config.input_dim, config.hidden_dim)))
+            layers.append((f"dense{idx + 1}", weight_norm(nn.Linear(config.hidden_dim, config.hidden_dim), dim=None) if config.weight_norm else nn.Linear(config.hidden_dim, config.hidden_dim)))
             layers.append((f"act{idx + 1}", deepcopy(config.act_func)))
             if config.use_normalization:
                 layers.append((f"batchnorm{idx + 2}", deepcopy(norm_layer)))
