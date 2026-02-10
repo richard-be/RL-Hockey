@@ -3,7 +3,8 @@ from dataclasses import dataclass, field
 from copy import deepcopy
 
 from models.batchrenorm import BatchRenorm1d
-from torch.nn.utils.parametrizations import weight_norm
+from torch.nn.utils import weight_norm
+
 
 from collections import OrderedDict
 
