@@ -142,7 +142,7 @@ class CrossQAgent:
         q_config = NNConfig(input_dim=obs_dim + action_dim, hidden_dim=self.config.q_hidden_dim, output_dim=1, 
                             normalization_config=NormalizationConfig(type=self.config.batch_norm_type, 
                                                                      momentum=self.config.batchn_norm_momentum, 
-                                                                     warmup_steps=self.config.batch_norm_warmup))
+                                                                     warmup_steps=self.config.batch_norm_warmup), weight_norm=self.config.weight_norm)
         
 
         
