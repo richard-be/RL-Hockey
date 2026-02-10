@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from copy import deepcopy
 
 from models.batchrenorm import BatchRenorm1d
+from torch.nn.utils.parametrizations import weight_norm
 
 from collections import OrderedDict
 
@@ -31,6 +32,8 @@ class NNConfig:
     use_normalization: bool = True
     normalization_config: NormalizationConfig = field(default_factory=NormalizationConfig)
 
+    weight_norm: bool = False
+
 class FeedForward(nn.Module):
 
     def __init__(self, config: NNConfig,
@@ -52,7 +55,8 @@ class FeedForward(nn.Module):
             layers.append(("batchnorm0", deepcopy(input_norm_layer)))
         
 
-        layers.extend([("dense0", nn.Linear(config.input_dim, config.hidden_dim)), ("act0", config.act_func)])
+        layers.extend([("dense0", weight_norm(nn.Linear(config.input_dim, config.hidden_dim), dim=None) if config.weight_norm else nn.Linear(config.input_dim, config.hidden_dim)),
+                        ("act0", config.act_func)])
 
         
 
@@ -67,7 +71,7 @@ class FeedForward(nn.Module):
             layers.append(("batchnorm1", deepcopy(norm_layer)))
      
         for idx in range(config.num_hidden_layers):
-            layers.append((f"dense{idx + 1}", nn.Linear(config.hidden_dim, config.hidden_dim)))
+            layers.append((f"dense{idx + 1}", weight_norm(nn.Linear(config.input_dim, config.hidden_dim), dim=None) if config.weight_norm else nn.Linear(config.input_dim, config.hidden_dim)))
             layers.append((f"act{idx + 1}", deepcopy(config.act_func)))
             if config.use_normalization:
                 layers.append((f"batchnorm{idx + 2}", deepcopy(norm_layer)))
