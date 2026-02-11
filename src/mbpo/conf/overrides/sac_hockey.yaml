@@ -14,13 +14,13 @@ model_lr: 0.001
 model_wd: 0.00001
 model_batch_size: 256
 validation_ratio: 0.2
-freq_train_model: 250
+freq_train_model: ${overrides.num_steps}
 # => size of SAC buffer (how many synthetic trajectories to sample)
-effective_model_rollouts_per_step: 400
+effective_model_rollouts_per_step: 0
 # rollout length calculated based on rollout_schedule which is
 # x_min, x_max, y_min, y_max for x = epoch+1 
 # => truncated linearly; here: rollout-length = 1 
-rollout_schedule: [20, 150, 1, 1] 
+rollout_schedule: [20, 150, 1, 10] 
 num_sac_updates_per_step: 1
 sac_updates_every_steps: 1
 num_epochs_to_retain_sac_buffer: 1

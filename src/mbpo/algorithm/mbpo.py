@@ -22,15 +22,37 @@ import mbrl.util.math
 from mbrl.planning.sac_wrapper import SACAgent
 from mbrl.third_party.pytorch_sac import VideoRecorder
 from omegaconf import OmegaConf
+import imageio
+from mbrl.models import OneDTransitionRewardModel
 
 # NOTE: replaced here! 
-from .re_implementations import model_env_sample
+from .re_implementations import model_env_sample, step_env_and_add_to_buffer, reset_noise
 from .custom_sac import SAC
+from .seperate_transition_reward_model import create_seperate_transition_reward_model
+from tqdm import tqdm
+from .hockey_connector import get_hockey_reward
 
 MBPO_LOG_FORMAT = mbrl.constants.EVAL_LOG_FORMAT + [
     ("epoch", "E", "int"),
     ("rollout_length", "RL", "int"),
 ]
+    # self.goal_player_1 = self._create_goal((W / 2 - 245 / SCALE - 10 / SCALE, H / 2), poly)
+    # self.goal_player_2 = self._create_goal((W / 2 + 245 / SCALE + 10 / SCALE, H / 2), poly)
+    # def _create_goal(self, position, poly):
+
+
+    # if self.env.goal_player_2 == contact.fixtureA.body or self.env.goal_player_2 == contact.fixtureB.body:
+    #   if self.env.puck == contact.fixtureA.body or self.env.puck == contact.fixtureB.body:
+    #     if self.verbose:
+    #       print('Player 1 scored')
+    #     self.env.done = True
+    #     self.env.winner = 1
+    # if self.env.goal_player_1 == contact.fixtureA.body or self.env.goal_player_1 == contact.fixtureB.body:
+    #   if self.env.puck == contact.fixtureA.body or self.env.puck == contact.fixtureB.body:
+    #     if self.verbose:
+    #       print('Player 2 scored')
+    #     self.env.done = True
+    #     self.env.winner = -1
 
 def rollout_model_and_populate_sac_buffer(
     model_env: mbrl.models.ModelEnv,
@@ -71,7 +93,7 @@ def rollout_model_and_populate_sac_buffer(
         #     action, model_state, sample=True
         # )
         pred_next_obs, pred_rewards, pred_dones, model_state, alea_uncertainties, epist_uncertainties = model_env_sample(
-            model_env.dynamics_model, model_env.termination_fn, model_env._rng, action, model_state, 
+            model_env, action, model_state, 
         )
 
         # pred rewards has shape (100000, 1) => unsqueeze uncertainties to add dimension (currently shape (100000))
@@ -214,9 +236,16 @@ def train(
         torch_generator.manual_seed(cfg.seed)
 
     # -------------- Create initial overrides. dataset --------------
-    dynamics_model = mbrl.util.common.create_one_dim_tr_model(cfg, obs_shape, act_shape)
     use_double_dtype = cfg.algorithm.get("normalize_double_precision", False)
     dtype = np.double if use_double_dtype else np.float32
+
+    # TODO: finish creating seperate models
+    if cfg.algorithm.learned_rewards: 
+        dynamics_model = mbrl.util.common.create_one_dim_tr_model(cfg, obs_shape, act_shape)
+    else: 
+        cfg.algorithm.learned_rewards = True
+        dynamics_model = create_seperate_transition_reward_model(cfg, obs_shape, act_shape)
+
     replay_buffer = mbrl.util.common.create_replay_buffer(
         cfg,
         obs_shape,
@@ -245,8 +274,32 @@ def train(
     )
     updates_made = 0
     env_steps = 0
+
+
+    # def create_env(): 
+    #     return gym.make("Hockey-One-v0")
+    # print("creating fake envs")
+    # fake_env = gym.vector.SyncVectorEnv(
+    #     [create_env for _ in range(100000)]
+    # )
+    # print("done")
+    
+    # fake_env = gym.make("Hockey-One-v0")
+    # fake_env.reset()
+    
+    # def reward_fn(actions, observs): 
+    #     def get_reward(i): 
+    #         fake_env.reset()
+    #         fake_env.set_state(observs[i].numpy().astype(np.float64))
+    #         _, reward,  _, _ , _ = fake_env.step(actions[i])
+    #         return reward
+    #     return torch.tensor([get_reward(i) for i in tqdm(range(len(observs)), "Correcting next rewards")]).unsqueeze(1)
+
+    reward_fn = get_hockey_reward(cfg.device)
+
     model_env = mbrl.models.ModelEnv(
-        env, dynamics_model, termination_fn, None, generator=torch_generator
+        # env, dynamics_model, termination_fn, reward_fn, generator=torch_generator
+        env, dynamics_model, termination_fn, reward_fn, generator=torch_generator
     )
     model_trainer = mbrl.models.ModelTrainer(
         dynamics_model,
@@ -277,6 +330,10 @@ def train(
                 obs, _ = env.reset()
                 terminated = False
                 truncated = False
+
+                # NOTE: added noise reset here
+                noise = reset_noise(cfg.overrides.beta, cfg.overrides.epoch_length, act_shape[0])
+                current_env_step = 0 
             # --- Doing env step and adding to model dataset ---
             # NOTE: could explore here? 
             (
@@ -285,15 +342,18 @@ def train(
                 terminated,
                 truncated,
                 _,
-            ) = mbrl.util.common.step_env_and_add_to_buffer(
-                env, obs, agent, {}, replay_buffer
+            # ) = mbrl.util.common.step_env_and_add_to_buffer(
+            #     env, obs, agent, {}, replay_buffer
+            # )
+            ) = step_env_and_add_to_buffer(
+                env, obs, agent, {}, replay_buffer, noise=noise[:, current_env_step], sigma=cfg.overrides.sigma
             )
-
+            current_env_step += 1 
             # --------------- Model Training -----------------
             # if cfg.algorithm.real_data_ratio == 1: 
             #     print("skipped model training because model data not used")
 
-            if ((env_steps + 1) % cfg.overrides.freq_train_model == 0) and (not cfg.algorithm.real_data_ratio == 1):
+            if ((env_steps + 1) % cfg.overrides.freq_train_model == 0):
                 mbrl.util.common.train_model_and_save_model_and_data(
                     dynamics_model,
                     model_trainer,
@@ -371,7 +431,12 @@ def train(
                     },
                 )
                 if avg_reward > best_eval_reward:
-                    video_recorder.save(f"{epoch}.mp4")
+                    # NOTE replaced save because it needed codec
+                    if video_recorder.enabled:
+                        video_path = os.path.join(video_recorder.save_dir, f"{epoch}.mp4")
+                        imageio.mimsave(video_path, video_recorder.frames, fps=video_recorder.fps, codec="libx264")
+
+                    # video_recorder.save(f"{epoch}.mp4")
                     best_eval_reward = avg_reward
                     agent.sac_agent.save_checkpoint(
                         ckpt_path=os.path.join(work_dir, "sac.pth")

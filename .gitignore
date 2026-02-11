@@ -3,3 +3,5 @@ __pycache__/
 outputs/
 singularity/images/
 .DS_Store
+test
+.vscode
