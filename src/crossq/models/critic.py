@@ -5,7 +5,8 @@ from models.feedforward import FeedForward, NNConfig
 @torch.no_grad()
 def project_weight_to_norm_ball(W: torch.tensor, scale: float = 1.0):
     n = torch.norm(W, p="fro")
-    W.mul_(scale / (n + 1e-12))  # epsilon to avoid division by zero
+    if n > scale:
+        W.mul_(scale / (n + 1e-12))  # epsilon to avoid division by zero
 
 class QNetwork(FeedForward):
     def __init__(self, config: NNConfig, *args, **kwargs):
