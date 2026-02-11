@@ -173,7 +173,7 @@ class CrossQAgent:
 
         if config.weight_norm:
             non_weight_decay_params = [param for q_function in self.q_functions for name, param in q_function.named_parameters() if not ("output_layers" in name and "weight" in name)]
-            weight_decay_params = [param for q_function in self.q_functions for name, param in q_function.output_layers.named_parameters() if "weight" in name]
+            weight_decay_params = [param for q_function in self.q_functions for name, param in q_function.output_layers.named_parameters()]
             self.q_optimizer = optim.AdamW([{"params": non_weight_decay_params, "weight_decay": 0},
                                             {"params": weight_decay_params}], lr=self.config.q_lr
                                         , betas=[self.config.adam_beta1, self.config.adam_beta2], weight_decay=config.weight_decay
@@ -193,7 +193,6 @@ class CrossQAgent:
 
         if self.config.dynamic_alpha:
             self.entropy_target = -torch.tensor(action_dim, dtype=torch.float32).to(self.config.device)
-            print(self.entropy_target)
             self.log_alpha = nn.Parameter(torch.zeros(1).to(self.config.device))  # we want alpha's value to be positive
             self.alpha_optimizer = optim.Adam([self.log_alpha], lr=self.config.alpha_lr)
 
