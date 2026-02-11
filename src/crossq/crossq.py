@@ -172,7 +172,7 @@ class CrossQAgent:
         self.buffer = Memory(max_size=self.config.buffer_size)
 
         if config.weight_norm:
-            non_weight_decay_params = [param for q_function in self.q_functions for name, param in q_function.named_parameters() if not ("output_layers" in name and "weight" in name)]
+            non_weight_decay_params = [param for q_function in self.q_functions for name, param in q_function.named_parameters() if not "output_layers" in name ]
             weight_decay_params = [param for q_function in self.q_functions for name, param in q_function.output_layers.named_parameters()]
             self.q_optimizer = optim.AdamW([{"params": non_weight_decay_params, "weight_decay": 0},
                                             {"params": weight_decay_params}], lr=self.config.q_lr
