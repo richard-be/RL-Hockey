@@ -22,7 +22,7 @@ class QNetwork(FeedForward):
     def normalize_weights_(self) -> None:
         for name, parameter in self.named_parameters():
             # only normalize non-finale dense layer's weights
-            if "body" in name and "dense" in name and "weight" in name:
+            if "body" in name and "dense" in name:
                 project_weight_to_norm_ball(parameter)
 
     def get_weight_norms(self) -> list[float]:
