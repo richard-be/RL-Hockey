@@ -96,6 +96,7 @@ if __name__ == "__main__":
     obs, _ = envs.reset(seed=args.seed)
     episode_count = 0
     global_step = 0
+    wins = 0
     while episode_count < args.num_games:
         # ALGO LOGIC: put action logic here
         actions, _, _ = actor.get_action(torch.Tensor(obs).to(device))
@@ -110,7 +111,10 @@ if __name__ == "__main__":
             for env_index, info in enumerate(infos["final_info"]):
                 if info is not None:
                     episode_count += 1
+                    
                     print(f"episode={episode_count}, global_step={global_step}, env={env_index}, winner={info['winner']}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
+                    if info["winner"] == 1:
+                        wins += 1
                     break
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
@@ -119,4 +123,5 @@ if __name__ == "__main__":
         if global_step % 1000 == 0:
             print("SPS:", int(global_step / (time.time() - start_time)))
         global_step+=1
+    print("win_rate: ", wins/args.num_games)
     envs.close()
