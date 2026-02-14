@@ -1,4 +1,5 @@
 import torch
+import math
 from models.feedforward import FeedForward, NNConfig
 
 
@@ -6,7 +7,7 @@ from models.feedforward import FeedForward, NNConfig
 def project_weight_to_norm_ball(module: torch.nn.Linear, scale: float | None = None):
     weight, bias = module.weight, module.bias
     if not scale:
-        scale = torch.sqrt(module.weight.shape[-1] / 3)  # expected norm under pytorch's initialization U(- 1/ sqrt(fan_in), 1 / sqrt(fan_in))
+        scale = math(module.weight.shape[-1] / 3)  # expected norm under pytorch's initialization U(- 1/ sqrt(fan_in), 1 / sqrt(fan_in))
     vec = torch.concat([weight.view(-1), bias.view(-1)])
     n = vec.norm(p=2)
     if scale < n:
