@@ -153,6 +153,7 @@ if __name__ == "__main__":
                     if args.track:
                         writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                         writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
+                        writer.add_scalar("charts/time_return", info["episode"]["r"], time.time()-start_time)
                     break
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`

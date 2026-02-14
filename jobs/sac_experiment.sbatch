@@ -42,6 +42,7 @@ for b in "${betas[@]}"; do
     done
 done
 
+combinations+=("$b $a false $sigma 2 1")
 i=0
 gpu_ids=(0 1 2 3)
 max_concurrent=4
