@@ -172,12 +172,19 @@ class CrossQAgent:
         self.buffer = Memory(max_size=self.config.buffer_size)
 
         if config.weight_norm:
-            non_weight_decay_params = [param for q_function in self.q_functions for name, param in q_function.named_parameters() if not "output_layers" in name ]
-            weight_decay_params = [param for q_function in self.q_functions for name, param in q_function.output_layers.named_parameters()]
+            # non_weight_decay_params = [param for q_function in self.q_functions for name, param in q_function.named_parameters() if not "output_layers" in name ]
+            # weight_decay_params = [param for q_function in self.q_functions for name, param in q_function.output_layers.named_parameters()]
+            non_weight_decay_params = [param for q_function in self.q_functions for name, param in q_function.named_parameters() if "dense" in name ]
+            weight_decay_params = [param for q_function in self.q_functions for name, param in q_function.named_parameters() if "dense" not in name]
             self.q_optimizer = optim.AdamW([{"params": non_weight_decay_params, "weight_decay": 0},
                                             {"params": weight_decay_params}], lr=self.config.q_lr
                                         , betas=[self.config.adam_beta1, self.config.adam_beta2], weight_decay=config.weight_decay
                                         )
+            
+            self.policy_optimizer = optim.AdamW(list(self.policy.parameters()), lr=self.config.actor_lr
+                                           , betas=[self.config.adam_beta1, self.config.adam_beta2],
+                                           weight_decay=self.config.weight_decay
+                                           )
 
         else:
             self.q_optimizer = optim.Adam([param for q_function in self.q_functions for param in q_function.parameters()], lr=self.config.q_lr
@@ -185,14 +192,14 @@ class CrossQAgent:
                                         )
 
         
-        self.policy_optimizer = optim.Adam(list(self.policy.parameters()), lr=self.config.actor_lr
+            self.policy_optimizer = optim.Adam(list(self.policy.parameters()), lr=self.config.actor_lr
                                            , betas=[self.config.adam_beta1, self.config.adam_beta2]
                                            )
 
         
 
         if self.config.dynamic_alpha:
-            self.entropy_target = -torch.tensor(action_dim, dtype=torch.float32).to(self.config.device)
+            self.entropy_target = -torch.tensor(action_dim, dtype=torch.float32).to(self.config.device) / 2 
             self.log_alpha = nn.Parameter(torch.zeros(1).to(self.config.device))  # we want alpha's value to be positive
             self.alpha_optimizer = optim.Adam([self.log_alpha], lr=self.config.alpha_lr)
 
@@ -268,10 +275,7 @@ class CrossQAgent:
             critic_loss = compute_critic_loss(self.q_functions, self.policy, alpha, self.config.discount_factor,
                                             observation, action, reward, next_observation, is_terminal, q_targets= self.q_target_functions if self.config.target else None)
             
-            # snapshots = []
-            # for q_func in self.q_functions:
-            #     snapshots.append(parameter_snapshot(q_func, [layer_name for layer_name in dict(q_func.named_parameters()).keys() if 
-            #                                             ("dense" in layer_name or "output_layers" in layer_name) and "weight" in layer_name]))
+
             self.q_optimizer.zero_grad()
             critic_loss.backward()
 
