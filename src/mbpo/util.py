@@ -2,7 +2,6 @@ import os
 from mbrl.util.common import create_one_dim_tr_model
 import pathlib 
 import torch 
-from algorithm.seperate_transition_reward_model import create_seperate_transition_reward_model
 
 def get_latest_run_dir(results_dir):
     def get_highest_folder(directory): 
@@ -15,6 +14,7 @@ def get_latest_run_dir(results_dir):
 
 def load_dynamics_model(model_dir, env, cfg,):
     if not cfg.algorithm.learned_rewards: 
+        from algorithm.seperate_transition_reward_model import create_seperate_transition_reward_model
         dynamics_model = create_seperate_transition_reward_model(cfg, env.observation_space.shape, env.action_space.shape)
         dynamics_model.model.load(model_dir)
         return dynamics_model

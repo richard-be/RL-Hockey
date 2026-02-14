@@ -5,3 +5,7 @@ singularity/images/
 .DS_Store
 test
 .vscode
+models
+runs 
+wandb
+videos

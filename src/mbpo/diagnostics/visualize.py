@@ -30,6 +30,28 @@ import hockey
 VisData = Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]
 from mbrl.util.env import Freeze
 
+STATE_LABELS = [
+        "x pos player one",
+        "y pos player one",
+        "angle player one",
+        "x vel player one",
+        "y vel player one",
+        "angular vel player one",
+        "x player two",
+        "y player two",
+        "angle player two",
+        "x vel player two",
+        "y vel player two",
+        "angular vel player two",
+        "x pos puck",
+        "y pos puck",
+        "x vel puck",
+        "y vel puck",
+        "time left player has puck",
+        "time left other player has puck",
+        "reward" 
+    ]
+
 class FreezeHockey(Freeze):
     def __init__(self, env: gym.wrappers.TimeLimit):
         self._env = env
@@ -261,6 +283,7 @@ class Visualizer:
                 lines.append(model_mean_line)
                 lines.append(model_lb_line)
                 lines.append(model_ub_line)
+                ax.set_title(STATE_LABELS[i], fontsize=4)
 
         self.fig = fig
 

@@ -82,5 +82,6 @@ def get_hockey_reward(device = "cpu", include_closeness_to_puck=True):
 def get_hockey_termination(device): 
    reward_fn = get_hockey_reward(device, include_closeness_to_puck=False)
    def termination_fn(actions, observs): 
-      return torch.abs(reward_fn(actions, observs)) == 10
+      terms = (torch.abs(reward_fn(actions, observs)) == 10).to(dtype=torch.bool)
+      return terms 
    return termination_fn
