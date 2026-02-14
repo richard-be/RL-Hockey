@@ -71,7 +71,7 @@ class HockeyEnv_CustomPlayers(HockeyEnv_BasicOpponent):
         self.opponent_pool = [
             # First start with the basic opponents, add more during training
             HockeyPlayer(BasicOpponent(weak=True)),
-            HockeyPlayer(BasicOpponent(weak=False)), 
+            HockeyPlayer(BasicOpponent(weak=False), elo=1400), 
         ]
         self.player = player
         self.opponent_selection_temp = 100 # temperature that allows for random opponents TODO: find parameter 

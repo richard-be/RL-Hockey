@@ -1,6 +1,7 @@
 import tyro 
 import json 
-from algorithm.env import make_env
+from algorithm.env import make_hockey_env, make_hockey_env_self_play, HockeyPlayer
+from hockey.hockey_env import HockeyEnv_BasicOpponent, BasicOpponent
 
 import random
 from dataclasses import dataclass
@@ -24,7 +25,7 @@ class Args:
     run_name: Optional[str] = None 
 
     num_envs: int = 1
-    weak_opponent = False 
+    weak_opponent = True 
     hockey_mode = Mode.NORMAL
     n_episodes: int = 10
     render: bool = False
@@ -61,7 +62,15 @@ if __name__ == "__main__":
     device = "cpu"
 
     # env setup
-    env = gym.vector.SyncVectorEnv([make_env(args.env_id, args.seed+i, True, i, args.run_name, 250, True, weak_opponent=args.weak_opponent, mode=args.hockey_mode) for i in range(args.num_envs)])
+    player = HockeyPlayer(None)
+
+    def make_env(seed): 
+        def thunk():
+            env = HockeyEnv_BasicOpponent(mode=args.hockey_mode)
+            env.action_space.seed(seed)
+            return env
+        return thunk
+    env = gym.vector.SyncVectorEnv([make_env(args.seed + 1) for i in range(args.num_envs)])
 
     model_path = f"runs/{args.run_name}/{args.exp_name}.cleanrl_model"
     actor_state, qf1_state, qf2_state = torch.load(model_path, map_location=device)
@@ -69,14 +78,15 @@ if __name__ == "__main__":
     actor = Actor(env)    
     actor.load_state_dict(actor_state)
     actor.to(device)
-    
-    start_time = time.time()
+    player.actor = actor
+
 
     # TRY NOT TO MODIFY: start the game
-    def run_episode(max_steps=250): 
+    def run_episode(max_steps=500): 
         obs, _ = env.reset(seed=args.seed)
         accum_reward = np.zeros(args.num_envs)
         is_winner = [False] 
+        is_loser = [False] 
 
         for _ in range(max_steps): 
             actions = actor(torch.Tensor(obs).to(device)).detach().cpu().numpy()
@@ -89,14 +99,25 @@ if __name__ == "__main__":
                 env.render()
             if term: 
                 is_winner = info["winner"] == 1 
+                is_loser = info["winner"] == -1
                 break
-        return accum_reward.mean(), np.sum(is_winner)
+        return accum_reward.mean(), np.sum(is_winner), np.sum(is_loser)
     
+    for opponent_name, opponent in [("weak", BasicOpponent(True)), ("strong", BasicOpponent(False)), ("self", HockeyPlayer(actor.clone()))]: 
+        print(f"Testing against {opponent_name} opponent...")
+        for hockey_env in env.envs: 
+            hockey_env.opponent = opponent
 
-    n_won = 0 
-    for _ in range(args.n_episodes):
-        reward, is_winner = run_episode()
-        print(f"Reward: {reward}; Won: {is_winner}")
-        n_won += is_winner
-    print(f"Win rate: {(n_won/args.n_episodes):.3f}")
+        n_won = 0 
+        n_lost = 0
+        n_draw = 0
+        for _ in range(args.n_episodes):
+            reward, is_winner, is_loser = run_episode()
+            is_draw = 1 - is_winner - is_loser
+            # print(f"Reward: {reward}; Won: {is_winner}, Lost: {is_loser}, Draw: {is_draw}")
+            n_won += is_winner
+            n_lost += is_loser
+            n_draw += is_draw
+        print(f"Win rate: {(n_won/args.n_episodes):.3f}, Lost rate: {(n_lost/args.n_episodes):.3f}, Draw rate: {(n_draw/args.n_episodes):.3f}")
+
     env.close()

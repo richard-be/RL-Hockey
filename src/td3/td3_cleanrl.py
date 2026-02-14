@@ -14,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 # NOTE: FIXED IMPORTS HERE 
 from algorithm.buffers import ReplayBuffer
-from algorithm.env import make_env, make_hockey_env, make_hockey_env_self_play, HockeyPlayer
+from algorithm.env import make_env, make_hockey_env, make_hockey_env_self_play, HockeyPlayer, HockeyEnv
 from algorithm.evaluation import evaluate 
 from algorithm.td3 import Actor, QNetwork
 
@@ -169,6 +169,11 @@ if __name__ == "__main__":
 
     envs = gym.vector.SyncVectorEnv([make_env_fn(i) for i in range(args.num_envs)])
     envs.single_observation_space.dtype = np.float32
+
+    def unwrap_env(env): 
+        if isinstance(env, HockeyEnv): return env 
+        else: return unwrap_env(env.env)  
+    unwrapped_envs = [unwrap_env(env) for env in envs.envs]
 
     eval_envs = gym.vector.SyncVectorEnv([make_env_fn(i) for i in range(args.num_envs)])
     eval_envs.single_observation_space.dtype = np.float32
@@ -420,6 +425,10 @@ if __name__ == "__main__":
                 save_and_eval_model(global_step, 10)
                 if args.is_self_play:
                     writer.add_scalar("charts/player_elo", player.elo, global_step)
+                    opponent_elo = np.mean([env.opponent.elo for env in unwrapped_envs])
+                    writer.add_scalar("charts/opponent_elo", opponent_elo, global_step)
+                    n_opponents = np.mean([len(env.opponent_pool) for env in unwrapped_envs])
+                    writer.add_scalar("charts/n_opponents", n_opponents, global_step)
             # END NOTE 
 
     if args.save_model:
