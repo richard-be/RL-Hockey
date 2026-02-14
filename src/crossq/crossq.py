@@ -281,7 +281,8 @@ class CrossQAgent:
 
             logs["critic_loss"] = critic_loss.item()
             logs["q_grad_norms"] = [get_gradient_norm(q_func) for q_func in self.q_functions]
-            logs["q_weight_norms"] = [torch.sum(q_func.get_weight_norms()) for q_func in self.q_functions]
+            logs["q_weight_norms"] = [q_func.get_weight_norms() for q_func in self.q_functions]
+            logs["actor_weight_norms"] = self.policy.get_weight_norms()
 
 
             self.q_optimizer.step()
