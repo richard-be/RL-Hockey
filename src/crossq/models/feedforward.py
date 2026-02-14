@@ -1,3 +1,4 @@
+import torch
 from torch import nn
 from dataclasses import dataclass, field
 from copy import deepcopy
@@ -38,22 +39,25 @@ class FeedForward(nn.Module):
                         *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        layers = []
         # Construct Input layer
-        layers = [("dense0", nn.Linear(config.input_dim, config.hidden_dim))]
-        
        
-        # if config.use_normalization:
-        #     if config.normalization_config.type == "BN":
-        #         input_norm_layer = nn.BatchNorm1d(num_features=config.input_dim,
-        #                                     momentum=config.normalization_config.momentum)
-        #     else:
-        #         input_norm_layer = BatchRenorm1d(num_features=config.input_dim,
-        #                                                    momentum=config.normalization_config.momentum,
-        #                                                    warmup_steps=config.normalization_config.warmup_steps)
-        #     layers.append(("batchnorm0", deepcopy(input_norm_layer)))
+
+        if config.use_normalization:
+            if config.normalization_config.type == "BN":
+                input_norm_layer = nn.BatchNorm1d(num_features=config.input_dim,
+                                            momentum=config.normalization_config.momentum)
+            else:
+                input_norm_layer = BatchRenorm1d(num_features=config.input_dim,
+                                                           momentum=config.normalization_config.momentum,
+                                                           warmup_steps=config.normalization_config.warmup_steps)
+            layers.append(("batchnorm0", deepcopy(input_norm_layer)))
         
 
+        layers.extend([("dense0", nn.Linear(config.input_dim, config.hidden_dim)), ("act0", config.act_func)])
+
         
+
         if config.use_normalization:
             if config.normalization_config.type == "BN":
                 norm_layer = nn.BatchNorm1d(num_features=config.hidden_dim,
@@ -62,15 +66,13 @@ class FeedForward(nn.Module):
                 norm_layer = BatchRenorm1d(num_features=config.hidden_dim,
                                                            momentum=config.normalization_config.momentum,
                                                            warmup_steps=config.normalization_config.warmup_steps)
-            layers.append(("batchnorm0", deepcopy(norm_layer)))
+            layers.append(("batchnorm1", deepcopy(norm_layer)))
      
-        layers.append(("act0", config.act_func))
         for idx in range(config.num_hidden_layers):
             layers.append((f"dense{idx + 1}", nn.Linear(config.hidden_dim, config.hidden_dim)))
-            if config.use_normalization:
-                layers.append((f"batchnorm{idx + 1}", deepcopy(norm_layer)))
             layers.append((f"act{idx + 1}", deepcopy(config.act_func)))
-            
+            if config.use_normalization:
+                layers.append((f"batchnorm{idx + 2}", deepcopy(norm_layer)))
 
         self.body = nn.Sequential(OrderedDict(layers))
 
@@ -93,6 +95,8 @@ class FeedForward(nn.Module):
 
         self.output_layers = nn.ModuleList(output_layers)
             
+
+
     
     def forward(self, x):
         z = self.body(x)
@@ -100,6 +104,14 @@ class FeedForward(nn.Module):
             return [out_layer(z) for out_layer in self.output_layers]
         else:
             return self.output_layers[0](z)
+        
+
+    def get_weight_norms(self) -> dict[float]:
+        norms = {}
+        for name, parameter in self.named_parameters():
+            if ("dense" in name or "output_layers" in name) and "weight" in name:
+                norms[name] = torch.norm(parameter, p="fro").item()
+        return norms
         
 
 def get_gradient_norm(model: nn.Module, p: int = 2) -> float:
