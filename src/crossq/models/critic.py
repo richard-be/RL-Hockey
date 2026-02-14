@@ -3,12 +3,15 @@ from models.feedforward import FeedForward, NNConfig
 
 
 @torch.no_grad()
-def project_weight_to_norm_ball(module: torch.nn.Linear, scale: float = 1.0):
+def project_weight_to_norm_ball(module: torch.nn.Linear, scale: float | None = None):
     weight, bias = module.weight, module.bias
+    if not scale:
+        scale = torch.sqrt(module.weight.shape[-1] / 3)  # expected norm under pytorch's initialization U(- 1/ sqrt(fan_in), 1 / sqrt(fan_in))
     vec = torch.concat([weight.view(-1), bias.view(-1)])
     n = vec.norm(p=2)
-    module.weight.mul_(scale / (n + 1e-12))  # epsilon to avoid division by zero
-    module.bias.mul_(scale / (n + 1e-12))
+    if scale < n:
+        module.weight.mul_(scale / (n + 1e-12))  # epsilon to avoid division by zero
+        module.bias.mul_(scale / (n + 1e-12))
 
 class QNetwork(FeedForward):
     def __init__(self, config: NNConfig, *args, **kwargs):
