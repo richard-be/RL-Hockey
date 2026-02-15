@@ -19,7 +19,12 @@ def update_elo_ratings(old_rating_a: float,
     # -1 - agent b has won
     e_a, e_b = compute_expected_scores(old_rating_a, old_rating_b)  # first compute the  expected scores of the agents
 
-    score_a, score_b = int(result == 1), int(result == -1)
+    if result == 1:
+        score_a, score_b = 1.0, 0.0
+    elif result == -1:
+        score_a, score_b = 0.0, 1.0
+    else:
+        score_a, score_b = 0.5, 0.5
 
     elo_a = old_rating_a + k_factor * (score_a - e_a)
     elo_b = old_rating_b + k_factor * (score_b - e_b)
