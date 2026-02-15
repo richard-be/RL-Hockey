@@ -195,7 +195,7 @@ def fit_cross_q(config: CrossQConfig):
     for _ in range(config.learning_starts):
         action = np.array([envs.single_action_space.sample() for _ in range(envs.num_envs)])
         next_observation, reward, terminated, truncated, info = envs.step(action)
-        agent.store_transition(observation, action, next_observation, reward, terminated or truncated)
+        agent.store_transition(observation, action, next_observation, reward, terminated | truncated)
 
         observation = next_observation
         if truncated or terminated:
