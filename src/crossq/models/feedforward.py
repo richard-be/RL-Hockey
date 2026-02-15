@@ -23,7 +23,7 @@ class NNConfig:
     output_dim: int | list[int]  # if  multiple output layers
 
     num_hidden_layers: int = 1
-    act_func: nn.Module = field(default_factory=nn.ReLU)
+    act_func: nn.Module = field(default_factory=nn.LeakyReLU)
 
     output_act: None | nn.Module | list[None | nn.Module] = None  # can be a list if num_heads > 1
     
