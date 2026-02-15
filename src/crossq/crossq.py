@@ -125,6 +125,7 @@ class CrossQAgentConfig:
     utd: int = 1
 
     weight_norm: bool = False
+    soft_l2: bool = False
     weight_decay: float = 1e-2
 
     clip_grad: bool = False
@@ -185,6 +186,17 @@ class CrossQAgent:
                                            , betas=[self.config.adam_beta1, self.config.adam_beta2],
                                            weight_decay=self.config.weight_decay
                                            )
+            
+        elif config.soft_l2:
+            self.q_optimizer = optim.AdamW([param for q_function in self.q_functions for param in q_function.parameters()], lr=self.config.q_lr
+                                        , betas=[self.config.adam_beta1, self.config.adam_beta2], weight_decay=config.weight_decay
+                                        )
+            
+            self.policy_optimizer = optim.AdamW(list(self.policy.parameters()), lr=self.config.actor_lr
+                                           , betas=[self.config.adam_beta1, self.config.adam_beta2],
+                                           weight_decay=self.config.weight_decay
+                                           )
+
 
         else:
             self.q_optimizer = optim.Adam([param for q_function in self.q_functions for param in q_function.parameters()], lr=self.config.q_lr
