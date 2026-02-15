@@ -112,10 +112,10 @@ class HockeyEnv_SelfPlay(h_env.HockeyEnv):
         self.pool.update_opponent_score(new_score=new_score)
 
     def step(self, action):
-        self.num_steps += 1
         if self.num_steps % self.swap_steps == 0:
             self._swap_agent()
-
+            
+        self.num_steps += 1
         ob2 = self.obs_agent_two()
         a2 = self.opponent.act(ob2)
         action2 = np.hstack([action, a2])
