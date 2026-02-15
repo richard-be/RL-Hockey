@@ -198,7 +198,7 @@ def fit_cross_q(config: CrossQConfig):
         agent.store_transition(observation, action, next_observation, reward, terminated | truncated)
 
         observation = next_observation
-        if truncated or terminated:
+        if truncated | terminated:
             observation, info = envs.reset()
     
     for step in range(config.train_steps):
@@ -207,31 +207,32 @@ def fit_cross_q(config: CrossQConfig):
         
         agent.store_transition(observation, action, next_observation, reward, terminated)
         observation = next_observation
-        if truncated or terminated:
+        if truncated | terminated:
             num_episodes += 1
             if config.use_tensorboard:
-                writer.add_scalar("Env/Return", info['episode']['r'], step)
-                writer.add_scalar("Env/Length", info['episode']['l'], step)
-                if is_hockey(config.env.env_id):
-                    winner = info['winner']
-                    if winner == 0:
-                        running_stats['draw'] += 1
-                    elif winner == 1:
-                        running_stats['win'] +=1
-                    else:
-                        running_stats['loss'] += 1
-                    
-                    writer.add_scalar("Env/WinRate", running_stats['win'] / num_episodes, step)
-                    writer.add_scalar("Env/DrawRate", running_stats['draw'] / num_episodes, step)
-                    writer.add_scalar("Env/LossRate", running_stats['loss'] / num_episodes, step)
-                    writer.add_scalar("Env/WinLossRatio", running_stats['win'] / running_stats['loss'] if running_stats['loss'] != 0 else 0, step)
-                    if config.env.opponent_type == 'selfplay':
-                        elo_score_opponent = envs.unwrapped.get_opponent_score()
-                        elo_score, elo_score_opponent = update_elo_ratings(elo_score, elo_score_opponent, k_factor=config.env.k_factor, result=winner)
-                        opponent_pool.update_opponent_score(new_score=elo_score_opponent)
-                        # env.unwrapped.update_opponent_score(new_score=elo_score_opponent)
-                        writer.add_scalar("Env/ELO_A", elo_score, step)
-                        writer.add_scalar("Env/ELO_B", elo_score_opponent, step)
+                for env_index, inf in enumerate(info["final_info"]):
+                    writer.add_scalar("Env/Return", inf['episode']['r'], step)
+                    writer.add_scalar("Env/Length", inf['episode']['l'], step)
+                    if is_hockey(config.env.env_id):
+                        winner = inf['winner']
+                        if winner == 0:
+                            running_stats['draw'] += 1
+                        elif winner == 1:
+                            running_stats['win'] +=1
+                        else:
+                            running_stats['loss'] += 1
+                        
+                        writer.add_scalar("Env/WinRate", running_stats['win'] / num_episodes, step)
+                        writer.add_scalar("Env/DrawRate", running_stats['draw'] / num_episodes, step)
+                        writer.add_scalar("Env/LossRate", running_stats['loss'] / num_episodes, step)
+                        writer.add_scalar("Env/WinLossRatio", running_stats['win'] / running_stats['loss'] if running_stats['loss'] != 0 else 0, step)
+                        if config.env.opponent_type == 'selfplay':
+                            elo_score_opponent = envs.unwrapped.get_opponent_score()
+                            elo_score, elo_score_opponent = update_elo_ratings(elo_score, elo_score_opponent, k_factor=config.env.k_factor, result=winner)
+                            opponent_pool.update_opponent_score(new_score=elo_score_opponent)
+                            # env.unwrapped.update_opponent_score(new_score=elo_score_opponent)
+                            writer.add_scalar("Env/ELO_A", elo_score, step)
+                            writer.add_scalar("Env/ELO_B", elo_score_opponent, step)
 
             observation, info = envs.reset()
         
