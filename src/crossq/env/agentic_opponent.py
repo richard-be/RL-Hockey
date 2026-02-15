@@ -42,7 +42,7 @@ class OpponentPool:
                  
         self.window_size = window_size
         self.play_against_latest_model_ratio = play_against_latest_model_ratio
-        self.opponent_pool: list[AgenticOpponent] = list([latest_agent])
+        self.opponent_pool: list[AgenticOpponent] = list([latest_agent] if latest_agent else [])
         self.score_pool: list[float] = list([latest_agent_score])
         self.current_agent_idx = -1
         
