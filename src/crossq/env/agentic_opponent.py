@@ -66,7 +66,11 @@ class OpponentPool:
             self.current_agent_idx = len(self.opponent_pool) - 1
             return self.opponent_pool[self.current_agent_idx]  
         else:
-            idx = random.choice(list(range(len(self.opponent_pool))))
+            # weighted choice by elo scores
+            scores = np.array(self.score_pool)
+            scores = scores / scores.sum()
+
+            idx = np.random.choice(list(range(len(self.opponent_pool))), p=scores).item()
             self.current_agent_idx = idx
             return self.opponent_pool[idx]
             
