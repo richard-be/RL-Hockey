@@ -30,7 +30,7 @@ from algorithm.colored_noise import reset_noise
 
 @dataclass
 class Args:
-    exp_name: str = "self_play_no_rnd_sigma0x2"
+    exp_name: str = "rnd_0_norm_0x1_no_sp"
     """the name of this experiment"""
     seed: int = 42
     """seed of the experiment"""
@@ -56,7 +56,7 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "HockeyOne-v0"
     """the id of the environment"""
-    total_timesteps: int = 1500000
+    total_timesteps: int = 1000000
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
@@ -88,12 +88,12 @@ class Args:
     hockey_mode: Mode = Mode.NORMAL
     """hockey specific arguments: whether to use a weak opponent"""
     weak_opponent: bool = False 
-    is_self_play: bool = True
+    is_self_play: bool = False
 
     # colored noise parameters
-    noise_type: str = "cn"
+    noise_type: str = "normal"
     noise_beta: float = 1.0
-    noise_sigma: float = 0.2 # TODO 
+    noise_sigma: float = 0 # TODO 
 
     # TODO: is this necessary? 
     env_max_episode_steps: int = 1000
@@ -101,7 +101,7 @@ class Args:
     # rnd parameters 
     rnd_update_proportion: float = 0.25
     """proportion of exp used for predictor update"""
-    rnd_int_coef: float = 0 # TODO disbaled for now
+    rnd_int_coef: float = 0 # TODO 
     """coefficient of extrinsic reward"""
     rnd_ext_coef: float = 1
     """coefficient of intrinsic reward"""
@@ -176,6 +176,7 @@ if __name__ == "__main__":
     unwrapped_envs = [unwrap_env(env) for env in envs.envs]
 
     eval_envs = gym.vector.SyncVectorEnv([make_env_fn(i) for i in range(args.num_envs)])
+    unwrapped_eval_envs = [unwrap_env(env) for env in eval_envs.envs]
     eval_envs.single_observation_space.dtype = np.float32
     # END OF NOTE 
 
@@ -226,17 +227,20 @@ if __name__ == "__main__":
     start_time = time.time()
 
     # NOTE: CHANGED HERE: moved to seperate function
-    def save_and_eval_model(current_step, n_eval_episodes = 10): 
+    def save_and_eval_model(current_step, n_eval_episodes = 1): 
         model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
         torch.save((actor.state_dict(), qf1.state_dict(), qf2.state_dict()), model_path)
         print(f"model saved to {model_path}")
 
         if n_eval_episodes > 0: 
             # NOTE: changed evaluation
-            accum_rewards, n_won, n_lost = evaluate(eval_envs, actor, device, False, False)
-            writer.add_scalar("eval/acum_reward", accum_rewards, current_step) # NOTE: changed here 
-            writer.add_scalar("eval/n_lost", n_lost, current_step) # NOTE: changed here 
-            writer.add_scalar("eval/n_won", n_won, current_step) # NOTE: changed here 
+            # accum_rewards, n_won, n_lost = evaluate(eval_envs, actor, device, False, False)
+            results = evaluate(eval_envs, unwrapped_eval_envs, n_eval_episodes, actor, is_self_play=args.is_self_play, unwrapped_train_envs=unwrapped_envs, device=device)
+            for opponent_name, stats in results.items():
+                writer.add_scalar(f"eval/{opponent_name}/acum_reward", stats["reward"], current_step)
+                writer.add_scalar(f"eval/{opponent_name}/lose_rate", stats["lose_rate"], current_step) 
+                writer.add_scalar(f"eval/{opponent_name}/win_rate", stats["win_rate"], current_step) 
+                writer.add_scalar(f"eval/{opponent_name}/draw_rate", stats["draw_rate"], current_step)
 
     # NOTE: moved RND normalization to separate function: 
     def normalize_obs(obs, eps=1e-8, clamp_range=(-5.0, 5.0)): 
@@ -299,13 +303,14 @@ if __name__ == "__main__":
                 rnd_next_obs = normalize_obs(next_obs) # NOTE: similified and moved to separate function
                 predict_next_feature, target_next_feature = rnd_model(rnd_next_obs) # NOTE: removed mb_inds here!
 
-                curiosity_rewards = ((target_next_feature - predict_next_feature).pow(2).sum(1) / 2).clamp(min=0, max=args.rnd_max_intrinsic_reward).cpu().numpy()
+                curiosity_rewards = ((target_next_feature - predict_next_feature).pow(2).sum(1) / 2).cpu().numpy()
 
             # Update running mean of intrinsic rewards
             int_reward_rms.update(curiosity_rewards)
             # Normalize intrinsic rewards and add to extrinsic rewards
             # TODO: normalize by mean as well? 
             curiosity_rewards /= np.sqrt(int_reward_rms.var + 1e-8)
+            curiosity_rewards = np.clip(curiosity_rewards, 0, args.rnd_max_intrinsic_reward)
 
             writer.add_scalar("charts/intrinsic_reward", curiosity_rewards.mean(), global_step) 
             writer.add_scalar("charts/extrinsic_reward", rewards.mean(), global_step) 
@@ -422,7 +427,7 @@ if __name__ == "__main__":
             # NOTE: ADDED HERE
             if (global_step+1) % 1000 == 0: 
                 print("Saving intermediate model")
-                save_and_eval_model(global_step, 10)
+                save_and_eval_model(global_step, 1)
                 if args.is_self_play:
                     writer.add_scalar("charts/player_elo", player.elo, global_step)
                     opponent_elo = np.mean([env.opponent.elo for env in unwrapped_envs])
@@ -437,3 +442,4 @@ if __name__ == "__main__":
 
     envs.close()
     writer.close()
+    

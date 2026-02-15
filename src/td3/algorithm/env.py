@@ -4,7 +4,7 @@ from gymnasium import spaces
 import numpy as np  
 from typing import List
 import torch 
-from algorithm.td3 import Actor
+from .td3 import Actor
 
 # NOTE: original env creation function 
 def make_env(env_id, seed, idx, capture_video, run_name):
@@ -162,6 +162,19 @@ class HockeyEnv_CustomPlayers(HockeyEnv_BasicOpponent):
         # self.opponent_probabilities.append([0.1] * len(self.opponent_pool) + [0.9]) # new level with new opponent as main opponent
         self.opponent_pool.append(HockeyPlayer(actor))
 
+class OpponentActor(): 
+    def __init__(self, weak: bool, keep_mode=True): 
+        self.opponent = BasicOpponent(weak)
+    def eval(self): 
+        pass
+    def train(self): 
+        pass 
+    def act(self, obs_batch): 
+        if len(obs_batch.shape) == 1: 
+            return self.opponent.act(obs_batch)
+         
+        actions = [self.opponent.act(obs) for obs in obs_batch]
+        return np.stack(actions).reshape(obs_batch.shape[0], -1)
 
 def make_hockey_env(seed, idx, capture_video, run_name, max_episode_steps=None, mode=Mode.NORMAL, weak_opponent=False):
     def thunk(): 
@@ -173,4 +186,12 @@ def make_hockey_env_self_play(seed, idx, capture_video, run_name, player: Hockey
     def thunk(): 
         env = HockeyEnv_CustomPlayers(player, mode=mode)
         return wrap_hockey_env(env, seed, idx, capture_video=capture_video, run_name=run_name, max_episode_steps=max_episode_steps)
+    return thunk
+
+
+def make_hockey_eval_env(seed, mode=Mode.NORMAL):
+    def thunk():
+        env = HockeyEnv_BasicOpponent(mode=mode)
+        env.action_space.seed(seed)
+        return env
     return thunk

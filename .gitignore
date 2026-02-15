@@ -9,3 +9,5 @@ models
 runs 
 wandb
 videos
+old_runs
+data
