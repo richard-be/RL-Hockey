@@ -43,7 +43,7 @@ class OpponentPool:
         self.window_size = window_size
         self.play_against_latest_model_ratio = play_against_latest_model_ratio
         self.opponent_pool: list[AgenticOpponent] = list([latest_agent] if latest_agent else [])
-        self.score_pool: list[float] = list([latest_agent_score])
+        self.score_pool: list[float] = list([latest_agent_score] if latest_agent else [])
         self.current_agent_idx = -1
         
     def add_agent(self, agent:AgenticOpponent, score: float) -> None:
@@ -114,7 +114,7 @@ class HockeyEnv_SelfPlay(h_env.HockeyEnv):
     def step(self, action):
         if self.num_steps % self.swap_steps == 0:
             self._swap_agent()
-            
+
         self.num_steps += 1
         ob2 = self.obs_agent_two()
         a2 = self.opponent.act(ob2)
