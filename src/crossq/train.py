@@ -198,8 +198,7 @@ def fit_cross_q(config: CrossQConfig):
         agent.store_transition(observation, action, next_observation, reward, terminated | truncated)
 
         observation = next_observation
-        if truncated | terminated:
-            observation, info = envs.reset()
+
     
     for step in range(config.train_steps):
         action = agent.act(observation).cpu().numpy()
@@ -207,7 +206,7 @@ def fit_cross_q(config: CrossQConfig):
         
         agent.store_transition(observation, action, next_observation, reward, terminated)
         observation = next_observation
-        if truncated | terminated:
+        if "final_info" in info:
             num_episodes += 1
             if config.use_tensorboard:
                 for env_index, inf in enumerate(info["final_info"]):
