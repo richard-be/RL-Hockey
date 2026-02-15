@@ -168,7 +168,6 @@ class CrossQAgent:
         self.policy = GaussianPolicy(min_action=torch.from_numpy(action_low), max_action=torch.from_numpy(action_high), 
                                      config=policy_config).to(self.config.device)
         
-
         
         self.buffer = Memory(max_size=self.config.buffer_size)
 
@@ -208,7 +207,6 @@ class CrossQAgent:
                                            , betas=[self.config.adam_beta1, self.config.adam_beta2]
                                            )
 
-        
 
         if self.config.dynamic_alpha:
             self.entropy_target = -torch.tensor(action_dim, dtype=torch.float32).to(self.config.device) / 2 
@@ -223,7 +221,11 @@ class CrossQAgent:
 
     def store_transition(self, obs: np.array, act: np.array, next_obs: np.array,
                           reward: np.array, is_terminal: np.array) -> None:
-        self.buffer.add_transition([obs, act, next_obs, reward, is_terminal])
+        if len(obs.shape) > 1:
+            for idx in range(obs.shape[0]):
+                self.buffer.add_transition([obs[idx], act[idx], next_obs[idx], reward[idx], is_terminal[idx]])
+        else:
+            self.buffer.add_transition([obs, act, next_obs, reward, is_terminal])
 
     
     def sample_data(self, n_samples: int = 32):
@@ -256,13 +258,10 @@ class CrossQAgent:
         for q_state, q_func in zip(q_staes, self.q_functions):
             q_func.load_state_dict(q_state)
     
-    # TODO: Write somewhere down that it is unstable without gradient clipping
-    def learn(self, update_policy: bool) -> dict[str, float]:
+    def learn(self, update_policy: bool, compute_logs: bool = True) -> dict[str, float]:
         logs = {}
-        for _ in range(self.config.utd):
+        for utd_idx in range(self.config.utd):
             observation, action, next_observation, reward, is_terminal = self.sample_data(self.config.batch_size)
-
-            
 
             if self.config.dynamic_alpha:
                 alpha_loss = compute_alpha_loss(self.policy, self.log_alpha, self.entropy_target, observation)
@@ -273,13 +272,15 @@ class CrossQAgent:
                 if self.config.clip_grad:
                     torch.nn.utils.clip_grad_norm_(self.log_alpha, 1.0)
 
-                logs['alpha_grad_norm'] = self.log_alpha.grad.detach().norm(2).item()
+                if utd_idx == 0:  # compute logs once per learn function call
+                    logs['alpha_grad_norm'] = self.log_alpha.grad.detach().norm(2).item()
 
                 self.alpha_optimizer.step()
 
                 alpha = torch.exp(self.log_alpha).item()
 
-                logs['alpha_value'] = alpha
+                if utd_idx == 0:  # compute logs once per learn function call
+                    logs['alpha_value'] = alpha
                 
             else:
                 alpha = self.config.alpha
@@ -295,24 +296,28 @@ class CrossQAgent:
                 for q_func in self.q_functions:
                     torch.nn.utils.clip_grad_norm_(q_func.parameters(), 1.0)
 
-            logs["critic_loss"] = critic_loss.item()
-            logs["q_grad_norms"] = [get_gradient_norm(q_func) for q_func in self.q_functions]
-            logs["q_weight_norms"] = [q_func.get_weight_norms() for q_func in self.q_functions]
-            logs["actor_weight_norms"] = self.policy.get_weight_norms()
+            if utd_idx == 0:  # compute logs once per learn function call
+                logs["critic_loss"] = critic_loss.item()
+                logs["q_grad_norms"] = [get_gradient_norm(q_func) for q_func in self.q_functions]
+                logs["q_weight_norms"] = [q_func.get_weight_norms() for q_func in self.q_functions]
+                logs["actor_weight_norms"] = self.policy.get_weight_norms()
 
 
             self.q_optimizer.step()
 
-            relu_stats_list = []
-            elrs_list = []
-            for idx, q_func in enumerate(self.q_functions):
-                elrs = measaure_effecitve_learning_rate(q_func, names=[layer_name for layer_name in dict(q_func.named_parameters()).keys() if 
-                                                        ("dense" in layer_name or "output_layers" in layer_name) and "weight" in layer_name])
-                relu_stats = compute_dead_relu_metrics(self.activations[idx])
-                relu_stats_list.append(relu_stats)
-                elrs_list.append(elrs)
-            logs[f"critic_relu_stats"] = relu_stats_list
-            logs[f"critic_elrs"] = elrs_list
+            if utd_idx == 0:  # compute logs once per learn function call
+                relu_stats_list = []
+                elrs_list = []
+                for idx, q_func in enumerate(self.q_functions):
+                    elrs = measaure_effecitve_learning_rate(q_func, names=[layer_name for layer_name in dict(q_func.named_parameters()).keys() if 
+                                                            ("dense" in layer_name or "output_layers" in layer_name) and "weight" in layer_name])
+                    relu_stats = compute_dead_relu_metrics(self.activations[idx])
+                    relu_stats_list.append(relu_stats)
+                    elrs_list.append(elrs)
+
+                
+                logs[f"critic_relu_stats"] = relu_stats_list
+                logs[f"critic_elrs"] = elrs_list
 
             if self.config.weight_norm:
                 for q_func in self.q_functions:
@@ -327,9 +332,10 @@ class CrossQAgent:
                 if self.config.clip_grad:
                     torch.nn.utils.clip_grad_norm_(self.policy.parameters(), 1.0)
 
-                logs['actor_loss'] = actor_loss.item()
-                logs['entropy'] = entropy.item()
-                logs['actor_grad_norm'] = get_gradient_norm(self.policy)
+                if utd_idx == 0:  # compute logs once per learn function call
+                    logs['actor_loss'] = actor_loss.item()
+                    logs['entropy'] = entropy.item()
+                    logs['actor_grad_norm'] = get_gradient_norm(self.policy)
 
                 self.policy_optimizer.step()
 

@@ -35,7 +35,7 @@ def construct_crossq_opponent(policy: GaussianPolicy, device: str = "cpu"):
     
 
 class OpponentPool:
-    def __init__(self, latest_agent: AgenticOpponent, 
+    def __init__(self, latest_agent: AgenticOpponent | None, 
                  latest_agent_score: float,
                  window_size: int,
                  play_against_latest_model_ratio: float):
@@ -89,22 +89,21 @@ class HockeyEnv_AgenticOpponent(h_env.HockeyEnv):
 
 
 class HockeyEnv_SelfPlay(h_env.HockeyEnv):
-    def __init__(self, agent: AgenticOpponent, 
-                 mode=h_env.Mode.NORMAL, window_size: int = 10,
-                 play_against_latest_model_ratio: float = .5,
-                 default_score: float = 1200.0,
+    def __init__(self, opponent_pool: OpponentPool, 
+                 mode=h_env.Mode.NORMAL,
+                 swap_steps: int = 30_000,
                  ):
         super().__init__(mode=mode, keep_mode=True)
-        self.default_score = default_score
-        self.pool = OpponentPool(latest_agent=agent, latest_agent_score=default_score,
-                                  window_size=window_size, play_against_latest_model_ratio=play_against_latest_model_ratio)
+        self.pool = opponent_pool
         self.action_space = gym.spaces.Box(-1, +1, (4,), dtype=np.float32)
         self.opponent = self.pool.sample_opponent()
+        self.swap_steps = swap_steps
+        self.num_steps = 1
 
-    def add_agent(self, agent: AgenticOpponent, score: float | None = None) -> None:
-        self.pool.add_agent(agent, score=score if score is not None else self.default_score)
+    # def add_agent(self, agent: AgenticOpponent, score: float | None = None) -> None:
+    #     self.pool.add_agent(agent, score=score if score is not None else self.default_score)
 
-    def swap_agent(self) -> None:
+    def _swap_agent(self) -> None:
         self.opponent = self.pool.sample_opponent()
 
     def get_opponent_score(self) -> float:
@@ -114,9 +113,12 @@ class HockeyEnv_SelfPlay(h_env.HockeyEnv):
         self.pool.update_opponent_score(new_score=new_score)
 
     def step(self, action):
+        self.num_steps += 1
+        if self.num_steps % self.swap_steps == 0:
+            self._swap_agent()
+
         ob2 = self.obs_agent_two()
         a2 = self.opponent.act(ob2)
-        print(a2.shape, action.shape)
         action2 = np.hstack([action, a2])
 
         return super().step(action2)
