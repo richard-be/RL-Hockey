@@ -96,9 +96,8 @@ class HockeyEnv_SelfPlay(h_env.HockeyEnv):
         super().__init__(mode=mode, keep_mode=True)
         self.pool = opponent_pool
         self.action_space = gym.spaces.Box(-1, +1, (4,), dtype=np.float32)
-        self.opponent = self.pool.sample_opponent()
         self.swap_steps = swap_steps
-        self.num_steps = 1
+        self.num_steps = 0
 
     # def add_agent(self, agent: AgenticOpponent, score: float | None = None) -> None:
     #     self.pool.add_agent(agent, score=score if score is not None else self.default_score)
