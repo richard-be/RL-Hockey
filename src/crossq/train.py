@@ -177,7 +177,8 @@ def fit_cross_q(config: CrossQConfig):
                         action_low=envs.single_action_space.low,
                         action_high=envs.single_action_space.high)
 
-    # if config.env.opponent_type == "selfplay":
+    if config.env.opponent_type == "selfplay":
+        opponent_pool.add_agent(custom_opponent=construct_crossq_opponent(agent.policy, device=config.agent_config.device))
     #     env.close()
     #     elo_score = config.env.initial_elo
     #     env: HockeyEnv_SelfPlay = create_environment(config.env, custom_opponent=construct_crossq_opponent(agent.policy, device=config.agent_config.device))
