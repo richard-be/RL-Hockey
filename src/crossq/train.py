@@ -244,7 +244,7 @@ def fit_cross_q(config: CrossQConfig):
                         writer.add_scalar("Env/LossRate", running_stats['loss'] / num_episodes, step)
                         writer.add_scalar("Env/WinLossRatio", running_stats['win'] / running_stats['loss'] if running_stats['loss'] != 0 else 0, step)
                         if config.env.opponent_type == 'selfplay':
-                            elo_score_opponent = envs.unwrapped.get_opponent_score()
+                            elo_score_opponent = opponent_pool.get_opponent_score()
                             elo_score, elo_score_opponent = update_elo_ratings(elo_score, elo_score_opponent, k_factor=config.env.k_factor, result=winner)
                             opponent_pool.update_opponent_score(new_score=elo_score_opponent)
                             # env.unwrapped.update_opponent_score(new_score=elo_score_opponent)
