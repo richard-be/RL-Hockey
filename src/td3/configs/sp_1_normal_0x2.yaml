@@ -1,0 +1,5 @@
+exp_name: sp_1_normal_0x2
+
+self_play: true
+noise_type: normal
+exploration_noise: 0.1

@@ -36,7 +36,7 @@ class Args:
     """seed of the experiment"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
-    cuda: bool = False
+    cuda: bool = True
     """if toggled, cuda will be enabled by default"""
     track: bool = True
     """if toggled, this experiment will be tracked with Weights and Biases"""
@@ -90,15 +90,15 @@ class Args:
     weak_opponent: bool = False 
     is_self_play: bool = True
     self_play_initial_opponents = (("weak", 1200), ("strong", 1500)) # can disable strong opponent in self-play mode to only use it as validation opponent
-    self_play_reuse_opponent_exp = True # add opponent's transition experience to replay buffer to increase sample efficiency of self-play training
+    self_play_reuse_opponent_exp = False # add opponent's transition experience to replay buffer to increase sample efficiency of self-play training
 
     # colored noise parameters
-    noise_type: str = "cn" # "normal" or "cn" (colored noise)
+    noise_type: str = "normal" # "normal" or "cn" (colored noise)
     noise_beta: float = 1.0
     noise_sigma: float = 0.2 # TODO 
 
     # TODO: is this necessary? 
-    env_max_episode_steps: int = 1000
+    env_max_episode_steps: int = 252
 
     # rnd parameters 
     rnd_update_proportion: float = 0.25
@@ -112,14 +112,36 @@ class Args:
     # """Intrinsic reward discount rate"""
     rnd_num_iterations_obs_norm_init: int = 50
     """number of iterations to initialize the observations normalization parameters"""
-    rnd_max_intrinsic_reward = 1.0
-    rnd_recompute_int_reward_on_replay = False
-    rnd_learning_rate = 1e-5
+    rnd_max_intrinsic_reward: float = 1.0
+    rnd_recompute_int_reward_on_replay: bool = False
+    rnd_learning_rate: float = 1e-5
+    
+    config: str = None
     # NOTE: end of change
+
+
+def load_yaml(path): 
+    # Source - https://stackoverflow.com/a/1774043
+    # Posted by Jonathan Holloway, modified by community. See post 'Timeline' for change history
+    # Retrieved 2026-02-16, License - CC BY-SA 4.0
+
+    import yaml
+
+    with open(path) as stream:
+        try:
+            return yaml.safe_load(stream)
+        except yaml.YAMLError as exc:
+            print(exc)
 
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
+    if args.config is not None:
+        config_args = load_yaml(args.config)
+        # overwrite args with config args
+        for key, value in config_args.items():
+            setattr(args, key, config_args[key])
+
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     # NOTE: changed here to account for num_envs
     total_timesteps = args.total_timesteps # int(args.effective_timesteps / args.num_envs)
@@ -166,17 +188,19 @@ if __name__ == "__main__":
         if not is_hockey:
             return make_env(args.env_id, args.seed+idx, idx, args.capture_video, run_name)
         if is_self_play: 
-            return make_hockey_env_self_play(args.seed+idx, idx, args.capture_video, run_name, player, initial_opponents=args.self_play_initial_opponents, max_episode_steps=None, mode=args.hockey_mode)
+            return make_hockey_env_self_play(args.seed+idx, idx, args.capture_video, run_name, player, initial_opponents=args.self_play_initial_opponents, mode=args.hockey_mode)
         else: 
-            return make_hockey_env(args.seed+idx, idx, args.capture_video, run_name, max_episode_steps=None, mode=args.hockey_mode, weak_opponent=args.weak_opponent)
+            return make_hockey_env(args.seed+idx, idx, args.capture_video, run_name, mode=args.hockey_mode, weak_opponent=args.weak_opponent)
 
     envs = gym.vector.SyncVectorEnv([make_env_fn(i) for i in range(args.num_envs)])
+    envs = gym.wrappers.vector.RecordEpisodeStatistics(envs)
+
     envs.single_observation_space.dtype = np.float32
 
     def unwrap_env(env): 
         if isinstance(env, HockeyEnv): return env 
         else: return unwrap_env(env.env)  
-    unwrapped_envs = [unwrap_env(env) for env in envs.envs]
+    unwrapped_envs = [unwrap_env(env) for env in envs.env.envs]
 
     eval_envs = gym.vector.SyncVectorEnv([make_env_fn(i) for i in range(args.num_envs)])
     unwrapped_eval_envs = [unwrap_env(env) for env in eval_envs.envs]
@@ -308,13 +332,10 @@ if __name__ == "__main__":
         episode_steps += 1 # NOTE: ADDED HERE for noise
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
-        if "final_info" in infos:
-            for info in infos["final_info"]:
-                if info is not None:
-                    print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
-                    writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-                    writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
-                    break
+        if "episode" in infos: 
+            env_has_info = infos["_episode"]
+            mean_episode_len = infos["episode"]['l'][env_has_info].mean()
+            writer.add_scalar("charts/mean_episode_length", mean_episode_len, global_step)
 
         # NOTE: added here for RND
         # First update obs running means

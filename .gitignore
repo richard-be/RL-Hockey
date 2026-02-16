@@ -11,3 +11,5 @@ wandb
 videos
 old_runs
 data
+runs_backup
+logs

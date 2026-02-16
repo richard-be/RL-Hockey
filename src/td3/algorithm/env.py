@@ -30,14 +30,12 @@ class RenderWrapper(gym.Wrapper):
     def render(self, **kwargs): 
         return self.env.render(mode=self.env.render_mode)
 
-def wrap_hockey_env(env, seed, idx, capture_video=False, run_name=None, max_episode_steps=None):
+def wrap_hockey_env(env, seed, idx, capture_video=False, run_name=None):
     if capture_video and idx == 0:
         env = RenderWrapper(env)
         env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
         env.enabled = False
-    if max_episode_steps is not None: 
-        env = gym.wrappers.TimeLimit(env, max_episode_steps)
-    env = gym.wrappers.RecordEpisodeStatistics(env)
+    # env = gym.wrappers.RecordEpisodeStatistics(env)
     env.action_space.seed(seed)
     return env
 
@@ -104,8 +102,6 @@ class HockeyEnv_CustomPlayers(HockeyEnv_BasicOpponent):
         info["action_agent_two"] = a2
         info["reward_agent_two"] = -reward
 
-        # obs, reward, term, trunc, info = super().step(action)
-        # todo: truncate if n steps is too long? => currently there will never be draw because trunc is always false and term only if winner
         if term: 
             # update statistics if episode is over 
             outcome = self.winner
@@ -148,16 +144,16 @@ class OpponentActor():
         actions = [self.opponent.act(obs) for obs in obs_batch]
         return np.stack(actions).reshape(obs_batch.shape[0], -1)
 
-def make_hockey_env(seed, idx, capture_video, run_name, max_episode_steps=None, mode=Mode.NORMAL, weak_opponent=False):
+def make_hockey_env(seed, idx, capture_video, run_name, mode=Mode.NORMAL, weak_opponent=False):
     def thunk(): 
         env = HockeyEnv_BasicOpponent(mode=mode, weak_opponent=weak_opponent)
-        return wrap_hockey_env(env, seed, idx, capture_video=capture_video, run_name=run_name, max_episode_steps=max_episode_steps)
+        return wrap_hockey_env(env, seed, idx, capture_video=capture_video, run_name=run_name)
     return thunk
 
-def make_hockey_env_self_play(seed, idx, capture_video, run_name, player: HockeyPlayer, initial_opponents=[("weak", 1200), ("strong", 1500)], max_episode_steps=None, mode=Mode.NORMAL):
+def make_hockey_env_self_play(seed, idx, capture_video, run_name, player: HockeyPlayer, initial_opponents=[("weak", 1200), ("strong", 1500)], mode=Mode.NORMAL):
     def thunk(): 
         env = HockeyEnv_CustomPlayers(player, initial_opponents=initial_opponents, mode=mode)
-        return wrap_hockey_env(env, seed, idx, capture_video=capture_video, run_name=run_name, max_episode_steps=max_episode_steps)
+        return wrap_hockey_env(env, seed, idx, capture_video=capture_video, run_name=run_name)
     return thunk
 
 
