@@ -12,8 +12,7 @@ from models.feedforward import NNConfig, NormalizationConfig, get_gradient_norm
 from utils.elr import parameter_snapshot, measaure_effecitve_learning_rate
 from utils.hooks import register_relu_hooks, compute_dead_relu_metrics
 
-from memory import Memory
-
+from memory import ReplayBuffer
 
 from dataclasses import dataclass
 
@@ -45,11 +44,9 @@ def compute_critic_loss(q_functions: list[QNetwork], policy: GaussianPolicy, alp
     
         next_q = torch.min(next_q, dim=0).values  # (Batch_size, 1)
         next_q = next_q - alpha * log_prob
-        next_q = next_q.squeeze(-1)  # (Batch_size, 1) -> (Batch_size, ) 
+        # next_q = next_q.squeeze(-1)  # (Batch_size, 1) -> (Batch_size, ) 
         target = rewards + gamma * next_q * (1 - finished)  #  rewards and finished have (batch_size) shapes
-
-    q = q.squeeze(-1)  # (Batch_size, 1) -> (Batch_size)        
-
+    # q = q.squeeze(-1)  # (Batch_size, 1) -> ( Batch_size)        
     return ((q - target) ** 2).mean()
     
 
@@ -135,7 +132,7 @@ class CrossQAgent:
 
     def __init__(self, 
                  config: CrossQAgentConfig, obs_dim: int, action_dim: int,
-                   action_low: np.array, action_high: np.array):
+                   action_low: np.array, action_high: np.array, replay_buffer: ReplayBuffer):
         
         self.config = config
         
@@ -169,7 +166,8 @@ class CrossQAgent:
                                      config=policy_config).to(self.config.device)
         
         
-        self.buffer = Memory(max_size=self.config.buffer_size)
+        # self.buffer = Memory(max_size=self.config.buffer_size) 
+        self.buffer = replay_buffer
 
         if config.weight_norm:
             # non_weight_decay_params = [param for q_function in self.q_functions for name, param in q_function.named_parameters() if not "output_layers" in name ]
@@ -220,30 +218,19 @@ class CrossQAgent:
                 target_param.data.copy_(target_param.data * (1 - self.config.tau ) + self.config.tau * q_param.data)
 
     def store_transition(self, obs: np.array, act: np.array, next_obs: np.array,
-                          reward: np.array, is_terminal: np.array) -> None:
-        if len(obs.shape) > 1:
-            for idx in range(obs.shape[0]):
-                self.buffer.add_transition([obs[idx], act[idx], next_obs[idx], reward[idx], is_terminal[idx]])
-        else:
-            self.buffer.add_transition([obs, act, next_obs, reward, is_terminal])
+                          reward: np.array, termination: np.array, info: list[dict]) -> None:
+        self.buffer.add(obs, next_obs, act, reward, termination, info)
 
     
     def sample_data(self, n_samples: int = 32):
-        observation, action, next_observation, reward, is_terminal = self.buffer.sample(n_samples).T
-
-        action = torch.from_numpy(np.stack(action)).to(torch.float32).to(self.config.device)
-        next_observation = torch.from_numpy(np.stack(next_observation)).to(torch.float32).to(self.config.device)
-        observation = torch.from_numpy(np.stack(observation)).to(torch.float32).to(self.config.device)
-        is_terminal = torch.from_numpy(np.stack(is_terminal)).to(torch.float32).to(self.config.device)
-        reward = torch.from_numpy(np.stack(reward)).to(torch.float32).to(self.config.device)
-
-        return observation, action, next_observation, reward, is_terminal
+        data = self.buffer.sample(n_samples)
+        return data.observations, data.actions, data.next_observations, data.rewards, data.dones 
 
     
     def act(self, observation: np.array, deterministic: bool = False) -> torch.Tensor:
         with torch.no_grad():
             self.policy.eval()
-            sample_action, _, det_action = self.policy.get_action(torch.from_numpy(observation).to(torch.float32).to(self.config.device).unsqueeze(0))
+            sample_action, _, det_action = self.policy.get_action(torch.from_numpy(observation).to(torch.float32).to(self.config.device))
             self.policy.train()
             return det_action.squeeze(0) if deterministic else sample_action.squeeze(0)
         
@@ -262,7 +249,6 @@ class CrossQAgent:
         logs = {}
         for utd_idx in range(self.config.utd):
             observation, action, next_observation, reward, is_terminal = self.sample_data(self.config.batch_size)
-
             if self.config.dynamic_alpha:
                 alpha_loss = compute_alpha_loss(self.policy, self.log_alpha, self.entropy_target, observation)
 
@@ -272,14 +258,14 @@ class CrossQAgent:
                 if self.config.clip_grad:
                     torch.nn.utils.clip_grad_norm_(self.log_alpha, 1.0)
 
-                if utd_idx == 0:  # compute logs once per learn function call
+                if utd_idx == 0 and compute_logs:  # compute logs once per learn function call
                     logs['alpha_grad_norm'] = self.log_alpha.grad.detach().norm(2).item()
 
                 self.alpha_optimizer.step()
 
                 alpha = torch.exp(self.log_alpha).item()
 
-                if utd_idx == 0:  # compute logs once per learn function call
+                if utd_idx == 0 and compute_logs:  # compute logs once per learn function call
                     logs['alpha_value'] = alpha
                 
             else:
@@ -296,7 +282,7 @@ class CrossQAgent:
                 for q_func in self.q_functions:
                     torch.nn.utils.clip_grad_norm_(q_func.parameters(), 1.0)
 
-            if utd_idx == 0:  # compute logs once per learn function call
+            if utd_idx == 0 and compute_logs:  # compute logs once per learn function call
                 logs["critic_loss"] = critic_loss.item()
                 logs["q_grad_norms"] = [get_gradient_norm(q_func) for q_func in self.q_functions]
                 logs["q_weight_norms"] = [q_func.get_weight_norms() for q_func in self.q_functions]
@@ -305,7 +291,7 @@ class CrossQAgent:
 
             self.q_optimizer.step()
 
-            if utd_idx == 0:  # compute logs once per learn function call
+            if utd_idx == 0 and compute_logs:  # compute logs once per learn function call
                 relu_stats_list = []
                 elrs_list = []
                 for idx, q_func in enumerate(self.q_functions):
@@ -332,7 +318,7 @@ class CrossQAgent:
                 if self.config.clip_grad:
                     torch.nn.utils.clip_grad_norm_(self.policy.parameters(), 1.0)
 
-                if utd_idx == 0:  # compute logs once per learn function call
+                if utd_idx == 0 and compute_logs:  # compute logs once per learn function call
                     logs['actor_loss'] = actor_loss.item()
                     logs['entropy'] = entropy.item()
                     logs['actor_grad_norm'] = get_gradient_norm(self.policy)

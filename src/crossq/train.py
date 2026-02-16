@@ -16,8 +16,11 @@ import hockey.hockey_env as h_env
 from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
 
 from torch.utils.tensorboard import SummaryWriter
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from functools import partial
+
+from memory import ReplayBuffer
+
 
 from crossq import CrossQAgent, CrossQAgentConfig
 from env.agentic_opponent import HockeyEnv_SelfPlay, HockeyEnv_AgenticOpponent, AgenticOpponent, construct_crossq_opponent, OpponentPool
@@ -51,7 +54,7 @@ class CrossQConfig:
     train_steps: int = 2_000_000
     learning_starts: int = 10_000
     save_freq: int = 100_000
-    log_freq: int = 100
+    log_freq: int = 900
     eval_freq: int = 50_000
 
     use_tensorboard: bool = True
@@ -137,7 +140,7 @@ def eval(agent: CrossQAgent,
     for name, env in envs.items():
         observation, info = env.reset()
         while True:
-            action = agent.act(observation).cpu().numpy()
+            action = agent.act(observation[np.newaxis, :]).cpu().numpy()
             observation, _, terminated, truncated, info = env.step(action)
             if terminated or truncated:
                 writer.add_scalar(f"Eval/Return_{name}", info['episode']['r'], global_step)
@@ -171,11 +174,20 @@ def fit_cross_q(config: CrossQConfig):
     envs = gym.vector.SyncVectorEnv([partial(create_environment, config.env, 
                                              opponent_pool=opponent_pool if config.env.opponent_type == "selfplay" else None) for _ in  range(config.num_envs)])
 
+    envs.single_observation_space.dtype = np.float32
     agent = CrossQAgent(config=config.agent_config, 
                         obs_dim=np.prod(envs.single_observation_space.shape),
                         action_dim=np.prod(envs.single_action_space.shape),
                         action_low=envs.single_action_space.low,
-                        action_high=envs.single_action_space.high)
+                        action_high=envs.single_action_space.high,
+                        replay_buffer=ReplayBuffer(config.agent_config.buffer_size,
+                                                   observation_space=envs.single_observation_space,
+                                                   action_space=envs.single_action_space,
+                                                   device=config.agent_config.device,
+                                                   n_envs=config.num_envs,
+                                                   handle_timeout_termination=False))
+
+    
 
     if config.env.opponent_type == "selfplay":
         opponent_pool.add_agent(construct_crossq_opponent(agent.policy, device=config.agent_config.device), elo_score)
@@ -195,7 +207,7 @@ def fit_cross_q(config: CrossQConfig):
     for _ in range(config.learning_starts):
         action = np.array([envs.single_action_space.sample() for _ in range(envs.num_envs)])
         next_observation, reward, terminated, truncated, info = envs.step(action)
-        agent.store_transition(observation, action, next_observation, reward, terminated | truncated)
+        agent.store_transition(observation, action, next_observation, reward, terminated, info)
 
         observation = next_observation
 
@@ -203,8 +215,13 @@ def fit_cross_q(config: CrossQConfig):
     for step in range(config.train_steps):
         action = agent.act(observation).cpu().numpy()
         next_observation, reward, terminated, truncated, info = envs.step(action)
+
+        real_next_obs = next_observation.copy()
+        for idx, trunc in enumerate(truncated):
+            if trunc and "final_observation" in info:
+                real_next_obs[idx] = info["final_observation"][idx]
         
-        agent.store_transition(observation, action, next_observation, reward, terminated)
+        agent.store_transition(observation, action, real_next_obs, reward, terminated, info)
         observation = next_observation
         if "final_info" in info:
             num_episodes += 1
@@ -235,27 +252,28 @@ def fit_cross_q(config: CrossQConfig):
 
             observation, info = envs.reset()
         
-        update_policy = step % config.agent_config.policy_delay == 0
-        logs = agent.learn(update_policy=update_policy)
-
-        if config.agent_config.dynamic_alpha:
-            alpha_grad_norm = logs['alpha_grad_norm']
-            alpha_value = logs['alpha_value']
-
-        if update_policy:
-            actor_loss = logs['actor_loss']
-            entropy = logs['entropy']
-            actor_grad_norm = logs['actor_grad_norm']
-
-        q_weight_norms = logs["q_weight_norms"]
-        actor_weight_norms = logs["actor_weight_norms"]
-        critic_loss = logs["critic_loss"] 
-        q_grad_norms = logs["q_grad_norms"]
-        q_relu_stats = logs["critic_relu_stats"] 
-        q_elrs = logs["critic_elrs"] 
-
+        update_policy = (step + 1) % config.agent_config.policy_delay == 0
+        compute_logs = (step + 1) % config.log_freq == 0
+        logs = agent.learn(update_policy=update_policy, compute_logs=compute_logs)
 
         if (step + 1) % config.log_freq == 0:
+
+            if config.agent_config.dynamic_alpha:
+                alpha_grad_norm = logs['alpha_grad_norm']
+                alpha_value = logs['alpha_value']
+
+            if update_policy:
+                actor_loss = logs['actor_loss']
+                entropy = logs['entropy']
+                actor_grad_norm = logs['actor_grad_norm']
+
+            q_weight_norms = logs["q_weight_norms"]
+            actor_weight_norms = logs["actor_weight_norms"]
+            critic_loss = logs["critic_loss"] 
+            q_grad_norms = logs["q_grad_norms"]
+            q_relu_stats = logs["critic_relu_stats"] 
+            q_elrs = logs["critic_elrs"] 
+
             if config.agent_config.dynamic_alpha:
                 writer.add_scalar("Grad/Alpha", alpha_grad_norm, step)
                 writer.add_scalar("Value/Alpha", alpha_value, step)
