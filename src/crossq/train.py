@@ -227,6 +227,7 @@ def fit_cross_q(config: CrossQConfig):
             num_episodes += 1
             if config.use_tensorboard:
                 for env_index, inf in enumerate(info["final_info"]):
+                    if inf is None: continue
                     writer.add_scalar("Env/Return", inf['episode']['r'], step)
                     writer.add_scalar("Env/Length", inf['episode']['l'], step)
                     if is_hockey(config.env.env_id):
