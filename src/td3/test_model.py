@@ -54,7 +54,7 @@ if __name__ == "__main__":
     # hyperparams = open(f"runs/{args.run_name}/args.json")
     print(args.run_name)
 
-    run_evaluation(
+    results = run_evaluation(
         run_name=args.run_name,
         n_episodes=args.n_episodes, 
         render=args.render, 
@@ -63,6 +63,10 @@ if __name__ == "__main__":
         exp_name=args.exp_name, 
         num_envs=args.num_envs
     )
+    for opponent, stats in results.items():
+        print("Opponent:", opponent)
+        for key, value in stats.items():
+            print(f"  {key}: {value}")
 
     # # TRY NOT TO MODIFY: start the game
     # def run_episode(max_steps=500): 

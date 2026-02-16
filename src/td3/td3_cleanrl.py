@@ -30,7 +30,7 @@ from algorithm.colored_noise import reset_noise
 
 @dataclass
 class Args:
-    exp_name: str = "rnd_0_norm_0x1_no_sp"
+    exp_name: str = "rnd_0_pn_0x2_rnd-lr_1e5_rnd-recompute_False_sp-reuse_True"
     """the name of this experiment"""
     seed: int = 42
     """seed of the experiment"""
@@ -44,7 +44,7 @@ class Args:
     """the wandb's project name"""
     wandb_entity: str = None
     """the entity (team) of wandb's project"""
-    capture_video: bool = True
+    capture_video: bool = False
     """whether to capture videos of the agent performances (check out `videos` folder)"""
     save_model: bool = True
     """whether to save model into the `runs/{run_name}` folder"""
@@ -88,12 +88,14 @@ class Args:
     hockey_mode: Mode = Mode.NORMAL
     """hockey specific arguments: whether to use a weak opponent"""
     weak_opponent: bool = False 
-    is_self_play: bool = False
+    is_self_play: bool = True
+    self_play_initial_opponents = (("weak", 1200), ("strong", 1500)) # can disable strong opponent in self-play mode to only use it as validation opponent
+    self_play_reuse_opponent_exp = True # add opponent's transition experience to replay buffer to increase sample efficiency of self-play training
 
     # colored noise parameters
-    noise_type: str = "normal"
+    noise_type: str = "cn" # "normal" or "cn" (colored noise)
     noise_beta: float = 1.0
-    noise_sigma: float = 0 # TODO 
+    noise_sigma: float = 0.2 # TODO 
 
     # TODO: is this necessary? 
     env_max_episode_steps: int = 1000
@@ -111,7 +113,8 @@ class Args:
     rnd_num_iterations_obs_norm_init: int = 50
     """number of iterations to initialize the observations normalization parameters"""
     rnd_max_intrinsic_reward = 1.0
-    
+    rnd_recompute_int_reward_on_replay = False
+    rnd_learning_rate = 1e-5
     # NOTE: end of change
 
 
@@ -163,7 +166,7 @@ if __name__ == "__main__":
         if not is_hockey:
             return make_env(args.env_id, args.seed+idx, idx, args.capture_video, run_name)
         if is_self_play: 
-            return make_hockey_env_self_play(args.seed+idx, idx, args.capture_video, run_name, player, max_episode_steps=None, mode=args.hockey_mode)
+            return make_hockey_env_self_play(args.seed+idx, idx, args.capture_video, run_name, player, initial_opponents=args.self_play_initial_opponents, max_episode_steps=None, mode=args.hockey_mode)
         else: 
             return make_hockey_env(args.seed+idx, idx, args.capture_video, run_name, max_episode_steps=None, mode=args.hockey_mode, weak_opponent=args.weak_opponent)
 
@@ -204,7 +207,7 @@ if __name__ == "__main__":
     rnd_model = RNDModel(envs.single_observation_space.shape[0], args.rnd_feature_size).to(device)
     rnd_optimizer = optim.Adam(
         list(rnd_model.predictor.parameters()), 
-        lr=args.learning_rate,
+        lr=args.rnd_learning_rate,
         eps=1e-5,
     )
 
@@ -245,10 +248,28 @@ if __name__ == "__main__":
     # NOTE: moved RND normalization to separate function: 
     def normalize_obs(obs, eps=1e-8, clamp_range=(-5.0, 5.0)): 
         if type(obs) == np.ndarray:
-            obs = torch.Tensor(obs).to(device)
+            obs = torch.from_numpy(obs).to(device)
         return ((obs - torch.tensor(obs_rms.mean, device=device, dtype=torch.float32)) / 
                         torch.sqrt(torch.tensor(obs_rms.var, device=device, dtype=torch.float32) + eps)).clamp(*clamp_range)
+    
+    def compute_intrinsic_reward(next_obs, update_obs_rms=True): 
+        with torch.no_grad():
+            rnd_next_obs = normalize_obs(next_obs) # NOTE: similified and moved to separate function
+            predict_next_feature, target_next_feature = rnd_model(rnd_next_obs) # NOTE: removed mb_inds here!
 
+            intrinsic_rewards = ((target_next_feature - predict_next_feature).pow(2).sum(1) / 2).cpu().numpy()
+        
+        # Update running mean of intrinsic rewards
+        if update_obs_rms:
+            int_reward_rms.update(intrinsic_rewards)
+        # Normalize intrinsic rewards and add to extrinsic rewards
+        # TODO: normalize by mean as well => does this make sense? 
+        # intrinsic_rewards = (intrinsic_rewards - int_reward_rms.mean) / np.sqrt(int_reward_rms.var + 1e-8)
+        intrinsic_rewards /= np.sqrt(int_reward_rms.var + 1e-8)
+        intrinsic_rewards = np.clip(intrinsic_rewards, 0, args.rnd_max_intrinsic_reward)
+        
+        return intrinsic_rewards
+    
     # NOTE: TAKEN FROM RICHARD
     max_episode_length = args.env_max_episode_steps
     noise = np.zeros((args.num_envs, envs.single_action_space.shape[0], max_episode_length))
@@ -282,7 +303,8 @@ if __name__ == "__main__":
                 actions = actions.clip(envs.single_action_space.low, envs.single_action_space.high)
 
         # TRY NOT TO MODIFY: execute the game and log data.
-        next_obs, rewards, terminations, truncations, infos = envs.step(actions)
+        next_obs, extrinsic_rewards, terminations, truncations, infos = envs.step(actions)
+        
         episode_steps += 1 # NOTE: ADDED HERE for noise
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
@@ -297,26 +319,18 @@ if __name__ == "__main__":
         # NOTE: added here for RND
         # First update obs running means
         obs_rms.update(next_obs)
-        if global_step > args.rnd_num_iterations_obs_norm_init: # wait for some data to accumulate in obs_rms before using it for normalization
+        if global_step < args.rnd_num_iterations_obs_norm_init: # wait for some data to accumulate in obs_rms before using it for normalization
+            intrinsic_rewards = np.zeros_like(extrinsic_rewards)
+        else: 
             # Compute curiosity rewards
-            with torch.no_grad():
-                rnd_next_obs = normalize_obs(next_obs) # NOTE: similified and moved to separate function
-                predict_next_feature, target_next_feature = rnd_model(rnd_next_obs) # NOTE: removed mb_inds here!
-
-                curiosity_rewards = ((target_next_feature - predict_next_feature).pow(2).sum(1) / 2).cpu().numpy()
-
-            # Update running mean of intrinsic rewards
-            int_reward_rms.update(curiosity_rewards)
-            # Normalize intrinsic rewards and add to extrinsic rewards
-            # TODO: normalize by mean as well? 
-            curiosity_rewards /= np.sqrt(int_reward_rms.var + 1e-8)
-            curiosity_rewards = np.clip(curiosity_rewards, 0, args.rnd_max_intrinsic_reward)
-
-            writer.add_scalar("charts/intrinsic_reward", curiosity_rewards.mean(), global_step) 
-            writer.add_scalar("charts/extrinsic_reward", rewards.mean(), global_step) 
+            intrinsic_rewards = compute_intrinsic_reward(next_obs)
 
             # TODO: keep track of intrinsic and extrinsic rewards separately in the replay buffer?
-            rewards = args.rnd_ext_coef * rewards + args.rnd_int_coef * curiosity_rewards
+            # total_rewards = args.rnd_ext_coef * extrinsic_rewards + args.rnd_int_coef * intrinsic_rewards
+
+            writer.add_scalar("charts/intrinsic_reward", intrinsic_rewards.mean(), global_step) 
+            writer.add_scalar("charts/extrinsic_reward", extrinsic_rewards.mean(), global_step) 
+            # writer.add_scalar("charts/total_reward", total_rewards.mean(), global_step) 
         
         # END OF NOTE 
 
@@ -325,7 +339,19 @@ if __name__ == "__main__":
         for idx, trunc in enumerate(truncations):
             if trunc:
                 real_next_obs[idx] = infos["final_observation"][idx]
-        rb.add(obs, real_next_obs, actions, rewards, terminations, infos) # TODO: add curiosity rewards here?
+
+        # NOTE: added intrinsic rewards to replay buffer
+        rb.add(obs, real_next_obs, actions, extrinsic_rewards, intrinsic_rewards, terminations, infos) 
+
+        if args.self_play_reuse_opponent_exp: 
+            # NOTE added re-using opponent experience in self-play
+            assert "obs_agent_two" in infos and "action_agent_two" in infos and "reward_agent_two" in infos, "Missing opponent experience in infos"
+            opponent_obs = infos["obs_agent_two"]
+            opponent_actions = infos["action_agent_two"]
+            opponent_extrinsic_rewards = infos["reward_agent_two"]
+            # NOTE: used same intrinsic reward for opponent (next state is the same)
+            rb.add(opponent_obs, real_next_obs, opponent_actions, opponent_extrinsic_rewards, intrinsic_rewards, terminations, infos)
+
 
         # NOTE: ADDED HERE for noise computation 
         for i, is_over in enumerate(terminations | truncations): 
@@ -360,10 +386,16 @@ if __name__ == "__main__":
                 qf1_next_target = qf1_target(data.next_observations, next_state_actions)
                 qf2_next_target = qf2_target(data.next_observations, next_state_actions)
                 min_qf_next_target = torch.min(qf1_next_target, qf2_next_target)
-                next_q_value = data.rewards.flatten() + (1 - data.dones.flatten()) * args.gamma * (min_qf_next_target).view(-1)
-                # NOTE: changed here to add intrinsic reward TODO: add intrinsic reward to q value? 
-                # next_q_value = (args.rnd_ext_coef * data.rewards.flatten() + 
-                #                 args.rnd_int_coef * curiosity_rewards) + (1 - data.dones.flatten()) * args.gamma * (min_qf_next_target).view(-1)
+
+                # NOTE: added intrinsic reward here
+                if args.rnd_recompute_int_reward_on_replay: 
+                    data_intrinsic_rewards = torch.from_numpy(compute_intrinsic_reward(data.next_observations, False)).to(device)
+                else: 
+                    data_intrinsic_rewards = data.intrinsic_rewards
+                data_total_rewards = args.rnd_ext_coef * data.extrinsic_rewards + args.rnd_int_coef * data_intrinsic_rewards
+                
+                next_q_value = data_total_rewards.flatten() + (1 - data.dones.flatten()) * args.gamma * (min_qf_next_target).view(-1)
+                # END OF NOTE 
             qf1_a_values = qf1(data.observations, data.actions).view(-1)
             qf2_a_values = qf2(data.observations, data.actions).view(-1)
             qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
@@ -413,8 +445,9 @@ if __name__ == "__main__":
                 writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
                 writer.add_scalar("losses/qf_loss", qf_loss.item() / 2.0, global_step)
                 writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
-                # print("SPS:", int(global_step / (time.time() - start_time)))
-                # print("Step:", global_step)
+                
+                writer.add_scalar("losses/rnd_loss", rnd_loss.item(), global_step)
+
                 writer.add_scalar(
                     "charts/SPS",
                     int(global_step / (time.time() - start_time)),
@@ -422,18 +455,22 @@ if __name__ == "__main__":
                 )
                 writer.add_scalar("charts/env_step", global_step*args.num_envs, global_step)
                 
-                writer.add_scalar("charts/intrinsic_reward", curiosity_rewards.mean(), global_step)
+                writer.add_scalar("rnd/intrinsic_reward_replay", data_intrinsic_rewards.mean(), global_step)
+                writer.add_scalar("rnd/extrinsic_reward_replay", data.extrinsic_rewards.mean(), global_step)
+                writer.add_scalar("rnd/total_reward_replay", data_total_rewards.mean(), global_step)
+                if args.rnd_recompute_int_reward_on_replay: 
+                    writer.add_scalar("rnd/intrinsic_reward_replay_recompute_diff", (data.intrinsic_rewards - data_intrinsic_rewards).mean(), global_step)
             
             # NOTE: ADDED HERE
             if (global_step+1) % 1000 == 0: 
                 print("Saving intermediate model")
                 save_and_eval_model(global_step, 1)
                 if args.is_self_play:
-                    writer.add_scalar("charts/player_elo", player.elo, global_step)
+                    writer.add_scalar("self_play/player_elo", player.elo, global_step)
                     opponent_elo = np.mean([env.opponent.elo for env in unwrapped_envs])
-                    writer.add_scalar("charts/opponent_elo", opponent_elo, global_step)
+                    writer.add_scalar("self_play/opponent_elo", opponent_elo, global_step)
                     n_opponents = np.mean([len(env.opponent_pool) for env in unwrapped_envs])
-                    writer.add_scalar("charts/n_opponents", n_opponents, global_step)
+                    writer.add_scalar("self_play/n_opponents", n_opponents, global_step)
             # END NOTE 
 
     if args.save_model:

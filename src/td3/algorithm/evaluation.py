@@ -112,13 +112,11 @@ def _setup_eval_envs(hockey_mode, num_envs, seed=42):
     eval_envs_unwrapped = [env.unwrapped for env in envs.envs]
     return player, envs, eval_envs_unwrapped
 
-
 def evaluate(
     eval_envs, 
     unwrapped_eval_envs, 
     n_eval_episodes: int,
     actor, 
-    eval_opponents, 
     is_self_play: bool = False,
     unwrapped_train_envs = None, 
     device: torch.device = torch.device("cpu"),
