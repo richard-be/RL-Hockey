@@ -27,6 +27,8 @@ from dataclasses import asdict
 # NOTE: added here, adapted from rnd.py
 from algorithm.rnd import RNDModel, RunningMeanStd
 from algorithm.colored_noise import reset_noise
+from gymnasium.wrappers.vector import RecordEpisodeStatistics
+from typing import Tuple, Optional
 
 @dataclass
 class Args:
@@ -42,7 +44,7 @@ class Args:
     """if toggled, this experiment will be tracked with Weights and Biases"""
     wandb_project_name: str = "td3hockey"
     """the wandb's project name"""
-    wandb_entity: str = None
+    wandb_entity: Optional[str] = None
     """the entity (team) of wandb's project"""
     capture_video: bool = False
     """whether to capture videos of the agent performances (check out `videos` folder)"""
@@ -89,8 +91,8 @@ class Args:
     """hockey specific arguments: whether to use a weak opponent"""
     weak_opponent: bool = False 
     is_self_play: bool = True
-    self_play_initial_opponents = (("weak", 1200), ("strong", 1500)) # can disable strong opponent in self-play mode to only use it as validation opponent
-    self_play_reuse_opponent_exp = False # add opponent's transition experience to replay buffer to increase sample efficiency of self-play training
+    self_play_initial_opponents: Tuple[Tuple[str, int]] = (("weak", 1200), ("strong", 1500)) # can disable strong opponent in self-play mode to only use it as validation opponent
+    self_play_reuse_opponent_exp: bool = False # add opponent's transition experience to replay buffer to increase sample efficiency of self-play training
 
     # colored noise parameters
     noise_type: str = "normal" # "normal" or "cn" (colored noise)
@@ -116,7 +118,7 @@ class Args:
     rnd_recompute_int_reward_on_replay: bool = False
     rnd_learning_rate: float = 1e-5
     
-    config: str = None
+    config: Optional[str] = None
     # NOTE: end of change
 
 
@@ -182,8 +184,9 @@ if __name__ == "__main__":
     # env setup
     # NOTE: changed env setup to support self-play
     if args.is_self_play:
-        player = HockeyPlayer(None) # add actor after creating envs (depends on envs for obs/action space)
+        player = HockeyPlayer(None, player_num=-1) # add actor after creating envs (depends on envs for obs/action space)
 
+    print("initial opponents:", args.self_play_initial_opponents)
     def make_env_fn(idx, is_hockey=args.is_hockey, is_self_play=args.is_self_play): 
         if not is_hockey:
             return make_env(args.env_id, args.seed+idx, idx, args.capture_video, run_name)
@@ -193,7 +196,7 @@ if __name__ == "__main__":
             return make_hockey_env(args.seed+idx, idx, args.capture_video, run_name, mode=args.hockey_mode, weak_opponent=args.weak_opponent)
 
     envs = gym.vector.SyncVectorEnv([make_env_fn(i) for i in range(args.num_envs)])
-    envs = gym.wrappers.vector.RecordEpisodeStatistics(envs)
+    envs = RecordEpisodeStatistics(envs)
 
     envs.single_observation_space.dtype = np.float32
 
@@ -492,6 +495,11 @@ if __name__ == "__main__":
                     writer.add_scalar("self_play/opponent_elo", opponent_elo, global_step)
                     n_opponents = np.mean([len(env.opponent_pool) for env in unwrapped_envs])
                     writer.add_scalar("self_play/n_opponents", n_opponents, global_step)
+                    opponent_player_nums = [env.opponent.player_num for env in unwrapped_envs]
+                    
+                    writer.add_scalar("self_play/opponent_player_num_median", np.median(opponent_player_nums), global_step)
+                    writer.add_scalar("self_play/opponent_player_num_min", np.min(opponent_player_nums), global_step)
+                    writer.add_scalar("self_play/opponent_player_num_max", np.max(opponent_player_nums), global_step)
             # END NOTE 
 
     if args.save_model:

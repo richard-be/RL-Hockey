@@ -107,7 +107,7 @@ def _load_actor(run_name, envs, exp_name=None, device="cpu"):
 
 def _setup_eval_envs(hockey_mode, num_envs, seed=42):
     # env setup
-    player = HockeyPlayer(None)
+    player = HockeyPlayer(None, player_num=-1)
     envs = gym.vector.SyncVectorEnv([make_hockey_eval_env(seed + 1, mode=hockey_mode) for i in range(num_envs)])
     eval_envs_unwrapped = [env.unwrapped for env in envs.envs]
     return player, envs, eval_envs_unwrapped

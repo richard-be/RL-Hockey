@@ -40,19 +40,19 @@ def wrap_hockey_env(env, seed, idx, capture_video=False, run_name=None):
     return env
 
 
-def compute_new_elo(player_elo, opponent_elo, outcome):
+def compute_new_elo(player_elo, opponent_elo, outcome, K=16):
   """Compute new Elo for a player based on outcome and opponent's Elo."""
   # NOTE: this is based on https://huggingface.co/learn/deep-rl-course/unit7/self-play#the-elo-score-to-evaluate-our-agent
   
-  K = 16 if player_elo > 1500 else 32  # higher K for lower Elo
   expected_score = 1 / (1 + 10**((opponent_elo - player_elo) / 400))
   actual_score = {1: 1, -1: 0, 0: 0.5}[outcome]
   return player_elo + K * (actual_score - expected_score)
 
 
 class HockeyPlayer():
-  def __init__(self, actor: Actor, elo=1200): 
+  def __init__(self, actor: Actor, player_num, elo=1200): 
     self.actor = actor
+    self.player_num = player_num
     self.elo = elo  
 
   def act(self, obs):
@@ -69,25 +69,21 @@ class HockeyEnv_CustomPlayers(HockeyEnv_BasicOpponent):
         assert len(initial_opponents) > 0, "At least one initial opponent must be provided"
         for opponent_type, opponent_elo in initial_opponents:
             if opponent_type == "weak":
-                self.opponent_pool.append(HockeyPlayer(OpponentActor(weak=True), elo=opponent_elo))
+                self.opponent_pool.append(HockeyPlayer(OpponentActor(weak=True), elo=opponent_elo, player_num=len(self.opponent_pool)))
             elif opponent_type == "strong":
-                self.opponent_pool.append(HockeyPlayer(OpponentActor(weak=False), elo=opponent_elo))
+                self.opponent_pool.append(HockeyPlayer(OpponentActor(weak=False), elo=opponent_elo, player_num=len(self.opponent_pool)))
             else:
                 raise ValueError(f"Invalid opponent type: {opponent_type}")
-            
         self.player = player
-        self.opponent_selection_temp = 100 # temperature that allows for random opponents TODO: find parameter 
-        self.diff_elo_to_add_opponent = 100 # if player has improved by this much since last opponent was added, add new opponent to pool; TODO: find parameter
+        self.opponent_selection_temp = 200 # temperature that allows for random opponents TODO: find parameter 
+        self.diff_elo_to_add_opponent = 150 # if player has improved by this much since last opponent was added, add new opponent to pool; TODO: find parameter
         self.last_player_elo_when_adding_opponent = self.player.elo
-
         super().__init__(mode=mode, weak_opponent=False) 
 
 
     def reset(self, one_starting=None, mode=None, seed=None, options=None): 
         obs, info = super().reset(one_starting, mode, seed, options)
         self.opponent = self.select_opponent()
-        # self.level -= 1 
-        # self.next_level()
 
         return obs, info
 
@@ -111,7 +107,7 @@ class HockeyEnv_CustomPlayers(HockeyEnv_BasicOpponent):
             opponent_elo = self.opponent.elo
 
             self.player.update_elo(outcome, opponent_elo)
-            self.opponent.update_elo(- outcome, player_elo)
+            # self.opponent.update_elo(- outcome, player_elo)
 
             if self.player.elo > self.last_player_elo_when_adding_opponent + self.diff_elo_to_add_opponent: 
                 # if player has improved significantly since last opponent was added, add new opponent to pool
@@ -120,15 +116,19 @@ class HockeyEnv_CustomPlayers(HockeyEnv_BasicOpponent):
 
         return obs, reward, term, trunc, info
 
-    def select_opponent(self) -> HockeyPlayer:
+    def select_opponent(self, min_prob=0.1) -> HockeyPlayer:
+
         elos = np.array([opponent.elo for opponent in self.opponent_pool])
         elo_diffs = np.abs(elos - self.player.elo)
         selection_probabilities = torch.softmax(-torch.tensor(elo_diffs) / (self.opponent_selection_temp), dim=0).numpy()
+
+        selection_probabilities = min_prob + (1 - min_prob) * selection_probabilities
+        selection_probabilities /= selection_probabilities.sum()  # normalize to sum to 1
         return np.random.choice(self.opponent_pool, p=selection_probabilities)
     
 
     def add_actor_to_opponent_pool(self, actor, elo=1200):
-        self.opponent_pool.append(HockeyPlayer(actor, elo))
+        self.opponent_pool.append(HockeyPlayer(actor, player_num=len(self.opponent_pool), elo=elo))
 
 class OpponentActor(): 
     def __init__(self, weak: bool, keep_mode=True): 
