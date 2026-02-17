@@ -93,7 +93,35 @@ def _set_seed(seed: int = 42):
     torch.manual_seed(seed)
     torch.backends.cudnn.deterministic = True 
 
+def _load_external_actor(run_name, envs, device="cpu"):
+    from .externals import Actor as SACActor, add_act_method
+
+    external_actor_types = {
+        "r": SACActor
+    }
+
+    # assume rest of run name is path to model
+    model_type = run_name[:2]
+    assert model_type[1] == "-" # format is ext__{model_type}-{path}
+    path = run_name[len(model_type):]
+
+    actor_state = torch.load(path, map_location=device)
+    print(f"Loaded external model from {path}")
+    
+    actor_type = external_actor_types.get(model_type[0], None)
+    if actor_type is None:
+        raise ValueError(f"Unknown external model type: {model_type[0]}")
+    
+    actor = actor_type(envs)
+    actor.load_state_dict(actor_state)
+    add_act_method(actor)
+
+    return actor.to(device)
+
 def _load_actor(run_name, envs, exp_name=None, device="cpu"):
+    if run_name and run_name.startswith("ext__"):
+        return _load_external_actor(run_name[len("ext__"):], envs, device)
+    
     exp_name = run_name.split("__")[1] if exp_name is None else exp_name
     model_path = f"runs/{run_name}/{exp_name}.cleanrl_model"
     actor_state, qf1_state, qf2_state = torch.load(model_path, map_location=device)
@@ -119,28 +147,38 @@ def evaluate(
     actor, 
     is_self_play: bool = False,
     unwrapped_train_envs = None, 
+    default_opponents = True,
+    custom_opponents = None,
     device: torch.device = torch.device("cpu"),
     render: bool = False
 ):
-    eval_opponents = [
-        ("weak", [OpponentActor(weak=True) for _ in unwrapped_eval_envs]),
-        ("strong", [OpponentActor(weak=False) for _ in unwrapped_eval_envs]),
-    ]
+    eval_opponents = []
+    if default_opponents:
+        eval_opponents.extend([
+            ("weak", [OpponentActor(weak=True) for _ in unwrapped_eval_envs]),
+            ("strong", [OpponentActor(weak=False) for _ in unwrapped_eval_envs]),
+        ])
+
     if is_self_play:
         assert len(eval_envs.envs) == len(unwrapped_train_envs), "number of envs must match"
         eval_opponents.append(("current", [env.opponent for env in unwrapped_train_envs]))
-    
+
+    if custom_opponents is not None:
+        for name, opponent in custom_opponents:
+            opponent = _load_actor(opponent, eval_envs)
+            eval_opponents.append((name, [opponent for _ in unwrapped_eval_envs]))
+
     return _evaluate_opponent_pool(eval_envs, unwrapped_eval_envs, n_eval_episodes, actor, eval_opponents, device, render)
 
 
-def run_evaluation(run_name, n_episodes=10, render=True, seed=42, hockey_mode=Mode.NORMAL, exp_name=None, num_envs=10, device = "cpu"):
+def run_evaluation(run_name, n_episodes=10, render=True, seed=42, hockey_mode=Mode.NORMAL, use_default_opponents=True, custom_opponents=None, exp_name=None, num_envs=10, device = "cpu"):
     _set_seed(seed) 
     player, envs, eval_envs_unwrapped = _setup_eval_envs(hockey_mode, num_envs, seed)
 
     actor = _load_actor(run_name, envs, exp_name, device)
     player.actor = actor
 
-    results = evaluate(envs, eval_envs_unwrapped, n_episodes, actor, render=render, device=device)
+    results = evaluate(envs, eval_envs_unwrapped, n_episodes, actor, default_opponents=use_default_opponents, custom_opponents=custom_opponents, render=render, device=device)
     envs.close()
     return results 
 

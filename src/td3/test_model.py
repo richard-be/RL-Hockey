@@ -30,6 +30,9 @@ class Args:
     n_episodes: int = 10
     render: bool = True
 
+    use_default_opponents: bool = True
+    opponents: Optional[tuple] = ("") 
+
 def find_latest_time(pattern): 
     import glob 
     latest_time = 0
@@ -54,15 +57,22 @@ if __name__ == "__main__":
     # hyperparams = open(f"runs/{args.run_name}/args.json")
     print(args.run_name)
 
+    opponents = None
+    if args.opponents:
+        opponents = [x.split(":") for x in args.opponents]
+        
     results = run_evaluation(
         run_name=args.run_name,
         n_episodes=args.n_episodes, 
         render=args.render, 
         seed=args.seed, 
         hockey_mode=args.hockey_mode, 
+        use_default_opponents=args.use_default_opponents,
+        custom_opponents=opponents,
         exp_name=args.exp_name, 
         num_envs=args.num_envs
     )
+
     for opponent, stats in results.items():
         print("Opponent:", opponent)
         for key, value in stats.items():
