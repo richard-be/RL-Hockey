@@ -305,10 +305,6 @@ class CrossQAgent:
                 logs[f"critic_relu_stats"] = relu_stats_list
                 logs[f"critic_elrs"] = elrs_list
 
-            if self.config.weight_norm:
-                for q_func in self.q_functions:
-                    q_func.normalize_weights_()
-
             
             if update_policy:
                 actor_loss, entropy, values = compute_actor_loss(self.q_functions, self.policy, alpha, observation)
@@ -324,6 +320,10 @@ class CrossQAgent:
                     logs['actor_grad_norm'] = get_gradient_norm(self.policy)
 
                 self.policy_optimizer.step()
+
+            if self.config.weight_norm:
+                for q_func in self.q_functions:
+                    q_func.normalize_weights_()
 
             if self.config.target:
                     self.update_target()
