@@ -282,7 +282,8 @@ def fit_cross_q(config: CrossQConfig):
 
             writer.add_scalar("Loss/Q_Loss", critic_loss, step)
             for idx, q_norm in enumerate(q_grad_norms):
-                writer.add_scalar(f"Grad/Q_{idx}", q_norm, step)
+                for layer_name, norm in q_norm.items():
+                    writer.add_scalar(f"Grad/Q_{idx}_{layer_name}", norm, step)
 
             for idx, q_w_norm in enumerate(q_weight_norms):
                 for layer_name, norm in q_w_norm.items():
@@ -303,7 +304,8 @@ def fit_cross_q(config: CrossQConfig):
 
             writer.add_scalar("Loss/Actor_Loss",  actor_loss, step)   
             writer.add_scalar("Loss/Entropy", entropy, step) 
-            writer.add_scalar("Grad/Actor",actor_grad_norm, step)
+            for layer_name, norm in actor_grad_norm.items():
+                writer.add_scalar(f"Grad/Actor_{layer_name}", norm, step)
 
         if (step + 1) % config.save_freq == 0:
             os.makedirs(f"models/crossq/{step + 1}/", exist_ok=True)

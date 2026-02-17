@@ -114,9 +114,8 @@ class FeedForward(nn.Module):
         return norms
         
 
-def get_gradient_norm(model: nn.Module, p: int = 2) -> float:
-    norm = 0
-    for param in model.parameters():
-        param_norm = param.grad.detach().data.norm(p).item()
-        norm += param_norm ** p
-    return norm ** (1.0 / p )
+def get_gradient_norm(model: nn.Module, p: int = 2) -> dict[str, float]:
+    norms = {}
+    for name, param in model.named_parameters():
+        norms[name] = param.grad.detach().data.norm(p).item()
+    return norms
