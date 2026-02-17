@@ -57,7 +57,7 @@ for PARAM in "${combinations[@]}"; do
       --bind $PWD:/workspace \
       $PWD/singularity/images/rl_hockey.simg \
       python3 /workspace/src/sac/run_training.py \
-      --alpha "$alpha" --beta "$beta" --total-timesteps 100000 --track --num-envs 4 --no-weak-opponent --no-self-play --sigma "$sigma" --num-q "$num_q" --update-ratio "$update_ratio"
+      --alpha "$alpha" --beta "$beta" --total-timesteps 200000 --track --num-envs 4 --no-weak-opponent --no-self-play --sigma "$sigma" --num-q "$num_q" --update-ratio "$update_ratio"
     )
 
     if [[ "$autotune" == "false" ]]; then
