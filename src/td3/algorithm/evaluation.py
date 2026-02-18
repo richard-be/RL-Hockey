@@ -21,8 +21,14 @@ def _evaluate_opponent_pool(
 
     n_envs = len(eval_envs.envs)
 
+    # this is a bit hacky, but make sure the that
+    one_starts = [False for _ in unwrapped_eval_envs] 
     def run_episode(): 
         obs, _ = eval_envs.reset()
+        for i, env in enumerate(unwrapped_eval_envs):
+            env.one_starts = one_starts[i] 
+            one_starts[i] = not one_starts[i]
+
         done = np.zeros(n_envs, dtype=bool) 
         accum_rewards = np.zeros(n_envs)
         won = np.zeros(n_envs)
@@ -95,9 +101,11 @@ def _set_seed(seed: int = 42):
 
 def _load_external_actor(run_name, envs, device="cpu"):
     from .externals import Actor as SACActor, add_act_method
+    from .td3 import Actor as TD3Actor
 
     external_actor_types = {
-        "r": SACActor
+        "r": SACActor,
+        "m": TD3Actor,
     }
 
     # assume rest of run name is path to model
@@ -106,6 +114,8 @@ def _load_external_actor(run_name, envs, device="cpu"):
     path = run_name[len(model_type):]
 
     actor_state = torch.load(path, map_location=device)
+    if isinstance(actor_state, tuple) and len(actor_state) == 3:   
+        actor_state = actor_state[0] # if it's a td3 model, just load the actor state
     print(f"Loaded external model from {path}")
     
     actor_type = external_actor_types.get(model_type[0], None)
@@ -122,7 +132,9 @@ def _load_actor(run_name, envs, exp_name=None, device="cpu"):
     if run_name and run_name.startswith("ext__"):
         return _load_external_actor(run_name[len("ext__"):], envs, device)
     
+    print("Loading actor of run", run_name)
     exp_name = run_name.split("__")[1] if exp_name is None else exp_name
+    print("name", exp_name)
     model_path = f"runs/{run_name}/{exp_name}.cleanrl_model"
     actor_state, qf1_state, qf2_state = torch.load(model_path, map_location=device)
 
