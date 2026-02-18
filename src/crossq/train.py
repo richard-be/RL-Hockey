@@ -255,7 +255,7 @@ def fit_cross_q(config: CrossQConfig):
         
         update_policy = (step + 1) % config.agent_config.policy_delay == 0
         compute_logs = (step + 1) % config.log_freq == 0
-        logs = agent.learn(update_policy=update_policy, compute_logs=compute_logs)
+        logs = agent.learn(update_policy=update_policy, compute_logs=compute_logs, normalize= step > 5_000)
 
         if (step + 1) % config.log_freq == 0:
 

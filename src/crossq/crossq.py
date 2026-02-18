@@ -68,22 +68,12 @@ def compute_actor_loss(q_functions: list[QNetwork], policy: GaussianPolicy, alph
         q_func.train()
 
     q_value = torch.min(qs, dim=0).values  # (#Q_functions, Batch size, 1) -> (Batch Size, 1)
+    return -(q_value - alpha * log_prob).mean(), -log_prob.mean(), log_prob
 
 
-    return -(q_value - alpha * log_prob).mean(), -log_prob.mean(), qs.mean(dim=1)
-
-
-def compute_alpha_loss(policy: GaussianPolicy, log_alpha: nn.Parameter, target_entropy: torch.Tensor, 
-                       observations: torch.Tensor) -> torch.Tensor:
-    with torch.no_grad():
-        policy.eval()
-        _, log_prob, _ = policy.get_action(observations)  # [Bs, 1]
-        policy.train()
-
-    alpha = torch.exp(log_alpha)
-
-
-    return -(alpha * (log_prob + target_entropy)).mean()
+def compute_alpha_loss(log_alpha: nn.Parameter, target_entropy: torch.Tensor, 
+                       log_prob: torch.Tensor) -> torch.Tensor:
+    return -(log_alpha.exp() * (log_prob + target_entropy)).mean()
 
 
 
@@ -230,7 +220,7 @@ class CrossQAgent:
     def act(self, observation: np.array, deterministic: bool = False) -> torch.Tensor:
         with torch.no_grad():
             self.policy.eval()
-            sample_action, _, det_action = self.policy.get_action(torch.from_numpy(observation).to(torch.float32).to(self.config.device))
+            sample_action, _, det_action = self.policy.get_action(torch.from_numpy(observation).to(self.config.device))
             self.policy.train()
             return det_action.squeeze(0) if deterministic else sample_action.squeeze(0)
         
@@ -245,24 +235,13 @@ class CrossQAgent:
         for q_state, q_func in zip(q_staes, self.q_functions):
             q_func.load_state_dict(q_state)
     
-    def learn(self, update_policy: bool, compute_logs: bool = True) -> dict[str, float]:
+    def learn(self, update_policy: bool, compute_logs: bool = True, normalize: bool = True) -> dict[str, float]:
         logs = {}
         for utd_idx in range(self.config.utd):
             observation, action, next_observation, reward, is_terminal = self.sample_data(self.config.batch_size)
+            # observation = observation.to(torch.float32)
+            # next_observation = next_observation.to(torch.float32)
             if self.config.dynamic_alpha:
-                alpha_loss = compute_alpha_loss(self.policy, self.log_alpha, self.entropy_target, observation)
-
-                self.alpha_optimizer.zero_grad()
-                alpha_loss.backward()
-
-                if self.config.clip_grad:
-                    torch.nn.utils.clip_grad_norm_(self.log_alpha, 1.0)
-
-                if utd_idx == 0 and compute_logs:  # compute logs once per learn function call
-                    logs['alpha_grad_norm'] = self.log_alpha.grad.detach().norm(2).item()
-
-                self.alpha_optimizer.step()
-
                 alpha = torch.exp(self.log_alpha).item()
 
                 if utd_idx == 0 and compute_logs:  # compute logs once per learn function call
@@ -307,7 +286,7 @@ class CrossQAgent:
 
             
             if update_policy:
-                actor_loss, entropy, values = compute_actor_loss(self.q_functions, self.policy, alpha, observation)
+                actor_loss, entropy, log_prob = compute_actor_loss(self.q_functions, self.policy, alpha, observation)
             
                 self.policy_optimizer.zero_grad()
                 actor_loss.backward()
@@ -321,7 +300,22 @@ class CrossQAgent:
 
                 self.policy_optimizer.step()
 
-            if self.config.weight_norm:
+                if self.config.dynamic_alpha:
+                    alpha_loss = compute_alpha_loss(self.log_alpha, self.entropy_target, log_prob.detach())
+
+                    self.alpha_optimizer.zero_grad()
+                    alpha_loss.backward()
+
+                    if self.config.clip_grad:
+                        torch.nn.utils.clip_grad_norm_(self.log_alpha, 1.0)
+
+                    if utd_idx == 0 and compute_logs:  # compute logs once per learn function call
+                        logs['alpha_grad_norm'] = self.log_alpha.grad.detach().norm(2).item()
+
+                self.alpha_optimizer.step()
+
+            if normalize and self.config.weight_norm:
+                # self.policy.normalize_weights_()
                 for q_func in self.q_functions:
                     q_func.normalize_weights_()
 
