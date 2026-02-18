@@ -4,7 +4,7 @@ from models.feedforward import FeedForward, NNConfig
 
 
 @torch.no_grad()
-def project_weight_to_norm_ball(module: torch.nn.Linear, scale: float | None = 1.0):
+def project_weight_to_norm_ball(module: torch.nn.Linear, scale: float | None = 1):
     weight, bias = module.weight, module.bias
     if not scale:
         scale = math.sqrt(module.weight.shape[0] / 3)  # expected norm under pytorch's initialization U(- 1/ sqrt(fan_in), 1 / sqrt(fan_in))
@@ -32,4 +32,5 @@ class QNetwork(FeedForward):
             if "dense" in name:
                 project_weight_to_norm_ball(module)
 
+    
     
