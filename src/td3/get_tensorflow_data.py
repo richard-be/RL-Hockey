@@ -8,7 +8,11 @@ import pandas as pd
 from tensorboard.backend.event_processing import event_accumulator
 from tqdm import tqdm
 
-def save_scalar_data(path, output_dir):
+def save_scalar_data(path, output_dir, skip_existing=True):
+    if skip_existing and os.path.exists(output_dir) and len(os.listdir(output_dir)) > 0:
+        print(f"Output directory {output_dir} already exists, skipping.")
+        return
+    
     ea = event_accumulator.EventAccumulator(path)
     ea.Reload()
 
@@ -16,6 +20,7 @@ def save_scalar_data(path, output_dir):
     scalar_tags = ea.Tags()['scalars']
 
     for tag in scalar_tags:
+
         events = ea.Scalars(tag)
         
         df = pd.DataFrame({
@@ -33,6 +38,9 @@ def save_scalar_data(path, output_dir):
 log_dir = "./runs"
 output_dir = "./data"
 for run in tqdm(os.listdir(log_dir)):
+    if not os.path.isdir(os.path.join(log_dir, run)):
+        continue
+
     for file in os.listdir(os.path.join(log_dir, run)):
         if file.startswith("events.out.tfevents"):
             out_dir = f"./data/{run}"

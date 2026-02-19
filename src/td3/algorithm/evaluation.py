@@ -100,17 +100,22 @@ def _set_seed(seed: int = 42):
     torch.backends.cudnn.deterministic = True 
 
 def _load_external_actor(run_name, envs, device="cpu"):
-    from .externals import Actor as SACActor, add_act_method
+    # from .externals import Actor as SACActor, add_act_method
     from .td3 import Actor as TD3Actor
+    from .externals.sac import Actor as SACActor
+    from .externals.utils import add_act_method
+    # from .externals.crossq import Actor as CRQActor
 
     external_actor_types = {
-        "r": SACActor,
-        "m": TD3Actor,
+        "sac": SACActor,
+        "td3": TD3Actor,
+        "crq": None, 
     }
 
+    LEN_PREFIX = 3
     # assume rest of run name is path to model
-    model_type = run_name[:2]
-    assert model_type[1] == "-" # format is ext__{model_type}-{path}
+    model_type = run_name[:LEN_PREFIX+1]
+    assert model_type[LEN_PREFIX] == "-" # format is ext__{model_type}-{path}
     path = run_name[len(model_type):]
 
     actor_state = torch.load(path, map_location=device)
@@ -118,9 +123,9 @@ def _load_external_actor(run_name, envs, device="cpu"):
         actor_state = actor_state[0] # if it's a td3 model, just load the actor state
     print(f"Loaded external model from {path}")
     
-    actor_type = external_actor_types.get(model_type[0], None)
+    actor_type = external_actor_types.get(model_type[:LEN_PREFIX], None)
     if actor_type is None:
-        raise ValueError(f"Unknown external model type: {model_type[0]}")
+        raise ValueError(f"Unknown external model type: {model_type[:LEN_PREFIX]}")
     
     actor = actor_type(envs)
     actor.load_state_dict(actor_state)
