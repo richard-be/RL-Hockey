@@ -13,16 +13,18 @@ from algorithm.td3 import Actor
 import time 
 from algorithm.evaluation import run_evaluation
 
+
 @dataclass
 class Args:
     env_id: str = "HockeyOne-v0"
-    exp_name: str = None
+    player_path: Optional[str] = None
+    exp_name: Optional[str] = None
     """the name of this experiment"""
     seed: int = 42
     """seed of the experiment"""
     time: str = "latest"
-    """the time of the experiment"""
-    run_name: Optional[str] = None 
+
+    weight_dir: str = "models/td3"
 
     num_envs: int = 10
     weak_opponent = True 
@@ -49,28 +51,28 @@ def find_latest_time(pattern):
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
-    if not args.run_name: 
-        args.run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__"
+    player_path = args.player_path
+
+    if not player_path: 
+        player_path = f"{args.env_id}__{args.exp_name}__{args.seed}__"
         if args.time == "latest": 
-            args.time = str(find_latest_time(args.run_name+"*"))
-        args.run_name += args.time
-    # hyperparams = open(f"runs/{args.run_name}/args.json")
-    print(args.run_name)
+            args.time = str(find_latest_time(player_path+"*"))
+        player_path += args.time
+        player_path = f"td3:{args.weight_dir}/{player_path}.model"
+    print(player_path) 
 
     opponents = None
     if args.opponents:
         opponents = [x.split(":") for x in args.opponents]
         
     results = run_evaluation(
-        run_name=args.run_name,
+        player_path=player_path,
         n_episodes=args.n_episodes, 
         render=args.render, 
         seed=args.seed, 
         hockey_mode=args.hockey_mode, 
         use_default_opponents=args.use_default_opponents,
         custom_opponents=opponents,
-        exp_name=args.exp_name, 
-        num_envs=args.num_envs
     )
 
     for opponent, stats in results.items():

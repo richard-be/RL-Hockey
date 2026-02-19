@@ -15,7 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 # NOTE: FIXED IMPORTS HERE 
 from algorithm.buffers import ReplayBuffer
 from algorithm.env import make_env, make_hockey_env, make_hockey_env_self_play, HockeyPlayer, HockeyEnv
-from algorithm.evaluation import evaluate 
+from algorithm.evaluation import evaluate, setup_eval_env
 from algorithm.td3 import Actor, QNetwork
 
 # NOTE: ADDED THESE IMPORTS 
@@ -205,9 +205,8 @@ if __name__ == "__main__":
         else: return unwrap_env(env.env)  
     unwrapped_envs = [unwrap_env(env) for env in envs.env.envs]
 
-    eval_envs = gym.vector.SyncVectorEnv([make_env_fn(i) for i in range(args.num_envs)])
-    unwrapped_eval_envs = [unwrap_env(env) for env in eval_envs.envs]
-    eval_envs.single_observation_space.dtype = np.float32
+    eval_player, eval_env, eval_env_unwrapped = setup_eval_env(args.hockey_mode, args.seed)
+    eval_env.observation_space.dtype = np.float32
     # END OF NOTE 
 
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
@@ -227,6 +226,7 @@ if __name__ == "__main__":
     # NOTE: added here: add model to player for self-play
     if args.is_self_play:
         player.actor = actor
+    eval_player.actor = actor
 
     # NOTE: added RND model and optimizer here
     # TODO: what should be the input and output dimensions of the RND model?
@@ -258,14 +258,13 @@ if __name__ == "__main__":
 
     # NOTE: CHANGED HERE: moved to seperate function
     def save_and_eval_model(current_step, n_eval_episodes = 1): 
-        model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
+        model_path = f"models/td3/{run_name}.model"
         torch.save((actor.state_dict(), qf1.state_dict(), qf2.state_dict()), model_path)
         print(f"model saved to {model_path}")
 
         if n_eval_episodes > 0: 
             # NOTE: changed evaluation
-            # accum_rewards, n_won, n_lost = evaluate(eval_envs, actor, device, False, False)
-            results = evaluate(eval_envs, unwrapped_eval_envs, n_eval_episodes, actor, is_self_play=args.is_self_play, unwrapped_train_envs=unwrapped_envs, device=device)
+            results = evaluate(eval_env, eval_env_unwrapped, n_eval_episodes, actor, is_self_play=args.is_self_play, unwrapped_train_envs=unwrapped_envs, device=device)
             for opponent_name, stats in results.items():
                 writer.add_scalar(f"eval/{opponent_name}/acum_reward", stats["reward"], current_step)
                 writer.add_scalar(f"eval/{opponent_name}/lose_rate", stats["lose_rate"], current_step) 

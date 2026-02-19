@@ -26,21 +26,25 @@ class QNetwork(nn.Module):
 class Actor(nn.Module):
     def __init__(self, env):
         super().__init__()
-        self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod(), 256)
+        # allow either vectorized env or single env as argument
+        obs_space = env.single_observation_space if hasattr(env, "single_observation_space") else env.observation_space
+        act_space = env.single_action_space if hasattr(env, "single_action_space") else env.action_space
+
+        self.fc1 = nn.Linear(np.array(obs_space.shape).prod(), 256)
         self.fc2 = nn.Linear(256, 256)
-        self.fc_mu = nn.Linear(256, np.prod(env.single_action_space.shape))
+        self.fc_mu = nn.Linear(256, np.prod(act_space.shape))
         # action rescaling
         self.register_buffer(
             "action_scale",
             torch.tensor(
-                (env.single_action_space.high - env.single_action_space.low) / 2.0,
+                (act_space.high - act_space.low) / 2.0,
                 dtype=torch.float32,
             ),
         )
         self.register_buffer(
             "action_bias",
             torch.tensor(
-                (env.single_action_space.high + env.single_action_space.low) / 2.0,
+                (act_space.high + act_space.low) / 2.0,
                 dtype=torch.float32,
             ),
         )
