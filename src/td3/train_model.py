@@ -13,10 +13,10 @@ import tyro
 from torch.utils.tensorboard import SummaryWriter
 
 # NOTE: FIXED IMPORTS HERE 
-from algorithm.buffers import ReplayBuffer
-from algorithm.env import make_env, make_hockey_env, make_hockey_env_self_play, HockeyPlayer, HockeyEnv
-from algorithm.evaluation import evaluate, setup_eval_env
-from algorithm.td3 import Actor, QNetwork
+from .algorithm.buffers import ReplayBuffer
+from .env import make_env, make_hockey_env, make_hockey_env_self_play, HockeyPlayer, HockeyEnv
+from .algorithm.evaluation import evaluate, setup_eval_env
+from .algorithm.td3 import Actor, QNetwork
 
 # NOTE: ADDED THESE IMPORTS 
 from tqdm import tqdm 
@@ -25,10 +25,12 @@ from hockey.hockey_env import HockeyEnv_BasicOpponent, Mode
 from dataclasses import asdict
 
 # NOTE: added here, adapted from rnd.py
-from algorithm.rnd import RNDModel, RunningMeanStd
-from algorithm.colored_noise import reset_noise
+from .algorithm.rnd import RNDModel, RunningMeanStd
+from .algorithm.colored_noise import reset_noise
 from gymnasium.wrappers.vector import RecordEpisodeStatistics
 from typing import Tuple, Optional
+
+import yaml
 
 @dataclass
 class Args:
@@ -123,20 +125,13 @@ class Args:
 
 
 def load_yaml(path): 
-    # Source - https://stackoverflow.com/a/1774043
-    # Posted by Jonathan Holloway, modified by community. See post 'Timeline' for change history
-    # Retrieved 2026-02-16, License - CC BY-SA 4.0
-
-    import yaml
-
     with open(path) as stream:
         try:
             return yaml.safe_load(stream)
         except yaml.YAMLError as exc:
             print(exc)
 
-
-if __name__ == "__main__":
+def main(): 
     args = tyro.cli(Args)
     if args.config is not None:
         config_args = load_yaml(args.config)
