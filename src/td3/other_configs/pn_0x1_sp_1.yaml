@@ -1,0 +1,6 @@
+exp_name: "pn_0x1_sp_1"
+
+
+is_self_play: true
+noise_type: "cn"
+noise_sigma: 0.1
