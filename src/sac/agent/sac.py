@@ -142,7 +142,7 @@ class Actor(nn.Module):
 
         return mean, log_std
 
-    def get_action(self, x):
+    def act(self, x):
         mean, log_std = self(x)
         std = log_std.exp()
         normal = torch.distributions.Normal(mean, std)
