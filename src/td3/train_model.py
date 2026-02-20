@@ -13,7 +13,7 @@ import tyro
 from torch.utils.tensorboard import SummaryWriter
 
 # NOTE: FIXED IMPORTS HERE 
-from .algorithm.buffers import ReplayBuffer
+from .algorithm.buffers import ReplayBuffer, PrioritizedReplayBuffer, PrioritizedBatch
 from .env import make_env, make_hockey_env, make_hockey_env_self_play, HockeyPlayer, HockeyEnv
 from .algorithm.evaluation import evaluate, setup_eval_env
 from .algorithm.td3 import Actor, QNetwork
@@ -34,7 +34,7 @@ import yaml
 
 @dataclass
 class Args:
-    exp_name: str = "rnd_0_pn_0x2_rnd-lr_1e5_rnd-recompute_False_sp-reuse_True"
+    exp_name: str = "test" #"rnd_0_pn_0x2_rnd-lr_1e5_rnd-recompute_False_sp-reuse_True"
     """the name of this experiment"""
     seed: int = 42
     """seed of the experiment"""
@@ -93,7 +93,7 @@ class Args:
     """hockey specific arguments: whether to use a weak opponent"""
     weak_opponent: bool = False 
     is_self_play: bool = True
-    self_play_initial_opponents: Tuple[Tuple[str, int]] = (("weak", 1200), ("strong", 1500)) # can disable strong opponent in self-play mode to only use it as validation opponent
+    self_play_initial_opponents: tuple = (("weak", 1200), ("strong", 1500)) # can disable strong opponent in self-play mode to only use it as validation opponent
     self_play_reuse_opponent_exp: bool = False # add opponent's transition experience to replay buffer to increase sample efficiency of self-play training
 
     # colored noise parameters
@@ -101,7 +101,6 @@ class Args:
     noise_beta: float = 1.0
     noise_sigma: float = 0.2 # TODO 
 
-    # TODO: is this necessary? 
     env_max_episode_steps: int = 252
 
     # rnd parameters 
@@ -120,6 +119,12 @@ class Args:
     rnd_recompute_int_reward_on_replay: bool = False
     rnd_learning_rate: float = 1e-5
     
+
+    # prioritized replay parameters
+    pr_alpha: float = 1
+    pr_beta: float = 1 
+    pr_enabled: bool = False
+
     config: Optional[str] = None
     # NOTE: end of change
 
@@ -224,7 +229,6 @@ def main():
     eval_player.actor = actor
 
     # NOTE: added RND model and optimizer here
-    # TODO: what should be the input and output dimensions of the RND model?
     # initialize model
     rnd_model = RNDModel(envs.single_observation_space.shape[0], args.rnd_feature_size).to(device)
     rnd_optimizer = optim.Adam(
@@ -233,21 +237,20 @@ def main():
         eps=1e-5,
     )
 
-    int_reward_rms = RunningMeanStd() # TODO: does this work? 
+    int_reward_rms = RunningMeanStd() 
     obs_rms = RunningMeanStd(shape=(envs.single_observation_space.shape[0], )) # NOTE: adapted shape  
-    # TODO: is this necessary? 
-    # rewards = torch.zeros((total_timesteps, args.num_envs)).to(device)
-    # curiosity_rewards = torch.zeros((total_timesteps, args.num_envs)).to(device)
 
     # END OF NOTE 
+    rb_class, rb_kwargs = (ReplayBuffer, {}) if not args.pr_enabled else (PrioritizedReplayBuffer, {"alpha": args.pr_alpha, "beta": args.pr_beta})
 
-    rb = ReplayBuffer(
+    rb = rb_class(
         args.buffer_size,
         envs.single_observation_space,
         envs.single_action_space,
         device,
         n_envs=args.num_envs,
-        handle_timeout_termination=False, #TODO: change??
+        handle_timeout_termination=False, 
+        **rb_kwargs, 
     )
     start_time = time.time()
 
@@ -284,7 +287,7 @@ def main():
         if update_obs_rms:
             int_reward_rms.update(intrinsic_rewards)
         # Normalize intrinsic rewards and add to extrinsic rewards
-        # TODO: normalize by mean as well => does this make sense? 
+        # TODO: potentially normalize by mean as well
         # intrinsic_rewards = (intrinsic_rewards - int_reward_rms.mean) / np.sqrt(int_reward_rms.var + 1e-8)
         intrinsic_rewards /= np.sqrt(int_reward_rms.var + 1e-8)
         intrinsic_rewards = np.clip(intrinsic_rewards, 0, args.rnd_max_intrinsic_reward)
@@ -312,6 +315,12 @@ def main():
         if global_step < learning_starts:
             actions = np.array([envs.single_action_space.sample() for _ in range(envs.num_envs)])
         else:
+            if args.pr_enabled:
+                # anneal PER beta to 1
+                rb.beta = min(
+                    1.0, args.pr_beta + global_step * (1.0 - args.pr_beta) / args.total_timesteps
+                )
+
             with torch.no_grad():
                 actions = actor(torch.Tensor(obs).to(device))
                 # NOTE: added colored noise here 
@@ -343,7 +352,6 @@ def main():
             # Compute curiosity rewards
             intrinsic_rewards = compute_intrinsic_reward(next_obs)
 
-            # TODO: keep track of intrinsic and extrinsic rewards separately in the replay buffer?
             # total_rewards = args.rnd_ext_coef * extrinsic_rewards + args.rnd_int_coef * intrinsic_rewards
 
             writer.add_scalar("charts/intrinsic_reward", intrinsic_rewards.mean(), global_step) 
@@ -414,19 +422,38 @@ def main():
                 
                 next_q_value = data_total_rewards.flatten() + (1 - data.dones.flatten()) * args.gamma * (min_qf_next_target).view(-1)
                 # END OF NOTE 
+
+
             qf1_a_values = qf1(data.observations, data.actions).view(-1)
             qf2_a_values = qf2(data.observations, data.actions).view(-1)
-            qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
-            qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
-            qf_loss = qf1_loss + qf2_loss
+            # dont take mean yet, need individual losses for prioritized replay
+            qf1_loss = F.mse_loss(qf1_a_values, next_q_value, reduction="none")
+            qf2_loss = F.mse_loss(qf2_a_values, next_q_value, reduction="none")
+            
+            # NOTE: apply importance sampling weights to the loss for prioritized replay
+            loss_factor = 1 if not args.pr_enabled else data.weights
+            qf_loss = ((qf1_loss + qf2_loss) * loss_factor).mean()
+
+            # NOTE: added priority update here
+            # apply importance sampling weights to the loss
+            # update priorities
+            if args.pr_enabled:
+                assert isinstance(data, PrioritizedBatch)
+                assert isinstance(rb, PrioritizedReplayBuffer)
+
+                q_err1 = torch.abs(qf1_a_values - next_q_value).cpu().detach().numpy()
+                q_err2 = torch.abs(qf2_a_values - next_q_value).cpu().detach().numpy()
+                new_priorities = np.min(q_err1, q_err2) # use minimum of the two TD errors for priority update
+                rb.update_priorities(data.indices, new_priorities)
 
             # NOTE: added RND loss here
-            # TODO: update RND model every step here or directly after collecting transition? 
             rnd_next_obs = normalize_obs(data.next_observations) # NOTE: simplified here and moved to separate function
             predict_next_state_feature, target_next_state_feature = rnd_model(rnd_next_obs) # NOTE: removed mb_inds here!
             rnd_loss = F.mse_loss(
                 predict_next_state_feature, target_next_state_feature.detach(), reduction="none"
             ).mean(-1)
+
+            rnd_loss = rnd_loss * loss_factor# fix dimensions and mean
 
             mask = torch.rand(len(rnd_loss), device=device)
             mask = (mask < args.rnd_update_proportion).float()
@@ -444,6 +471,8 @@ def main():
 
             if global_step % args.policy_frequency == 0:
                 actor_loss = -qf1(data.observations, actor(data.observations)).mean()
+                # actor_loss = -qf1(data.observations, actor(data.observations)).view(-1)
+                # actor_loss = (actor_loss * loss_factor).mean() # apply importance sampling weights to the loss and mean
                 actor_optimizer.zero_grad()
                 actor_loss.backward()
                 actor_optimizer.step()
@@ -459,8 +488,8 @@ def main():
             if global_step % 100 == 0:
                 writer.add_scalar("losses/qf1_values", qf1_a_values.mean().item(), global_step)
                 writer.add_scalar("losses/qf2_values", qf2_a_values.mean().item(), global_step)
-                writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
-                writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
+                writer.add_scalar("losses/qf1_loss", qf1_loss.mean().item(), global_step)
+                writer.add_scalar("losses/qf2_loss", qf2_loss.mean().item(), global_step)
                 writer.add_scalar("losses/qf_loss", qf_loss.item() / 2.0, global_step)
                 writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
                 
