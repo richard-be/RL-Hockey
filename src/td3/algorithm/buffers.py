@@ -559,7 +559,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         weights = (self.size() * probs / p_total) ** -self.beta
         weights = weights / weights.max()
         weights = torch.from_numpy(weights).to(self.device) # .unsqueeze(1)
-        indices = torch.from_numpy(np.array(indices)).to(self.device) #.unsqueeze(1)
+        # indices = torch.from_numpy(np.array(indices)).to(self.device) #.unsqueeze(1)
 
         return PrioritizedBatch(*samples, weights=weights, indices=indices)
 

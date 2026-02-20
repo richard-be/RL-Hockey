@@ -11,9 +11,11 @@ import torch.nn.functional as F
 import torch.optim as optim
 import tyro
 from torch.utils.tensorboard import SummaryWriter
-
 # NOTE: FIXED IMPORTS HERE 
-from .algorithm.buffers import ReplayBuffer, PrioritizedReplayBuffer, PrioritizedBatch
+from torchrl.data import ReplayBuffer, TensorDictReplayBuffer, ListStorage, TensorDictPrioritizedReplayBuffer, LazyTensorStorage
+from tensordict import TensorDict
+
+# from .algorithm.buffers import ReplayBuffer, PrioritizedReplayBuffer, PrioritizedBatch
 from .env import make_env, make_hockey_env, make_hockey_env_self_play, HockeyPlayer, HockeyEnv
 from .algorithm.evaluation import evaluate, setup_eval_env
 from .algorithm.td3 import Actor, QNetwork
@@ -121,8 +123,8 @@ class Args:
     
 
     # prioritized replay parameters
-    pr_alpha: float = 1
-    pr_beta: float = 1 
+    pr_alpha: float = 0.5
+    pr_beta: float = 0.4
     pr_enabled: bool = False
 
     config: Optional[str] = None
@@ -135,6 +137,24 @@ def load_yaml(path):
             return yaml.safe_load(stream)
         except yaml.YAMLError as exc:
             print(exc)
+
+def rb_add(rb, obs, next_obs, action, extrinsic_reward, intrinsic_reward, done, info):
+    def ensure_tensor(x, dtype=torch.float32):
+        if isinstance(x, torch.Tensor):
+            return x
+        else:
+            return torch.as_tensor(x, dtype=dtype)
+
+    batch_size = obs.shape[0] if len(obs.shape) > 1 else 1 # check if vectorized env or not 
+    td = TensorDict({
+        "observation": ensure_tensor(obs),
+        "next_observation": ensure_tensor(next_obs),
+        "action": ensure_tensor(action),
+        "extrinsic_reward": ensure_tensor(extrinsic_reward),
+        "intrinsic_reward": ensure_tensor(intrinsic_reward),
+        "done": ensure_tensor(done, dtype=torch.bool),
+    }, batch_size=batch_size)
+    rb.extend(td)
 
 def main(): 
     args = tyro.cli(Args)
@@ -241,17 +261,22 @@ def main():
     obs_rms = RunningMeanStd(shape=(envs.single_observation_space.shape[0], )) # NOTE: adapted shape  
 
     # END OF NOTE 
-    rb_class, rb_kwargs = (ReplayBuffer, {}) if not args.pr_enabled else (PrioritizedReplayBuffer, {"alpha": args.pr_alpha, "beta": args.pr_beta})
+    # rb_class, rb_kwargs = (ReplayBuffer, {}) if not args.pr_enabled else (PrioritizedReplayBuffer, {"alpha": args.pr_alpha, "beta": args.pr_beta})
 
-    rb = rb_class(
-        args.buffer_size,
-        envs.single_observation_space,
-        envs.single_action_space,
-        device,
-        n_envs=args.num_envs,
-        handle_timeout_termination=False, 
-        **rb_kwargs, 
-    )
+    if args.pr_enabled:
+        rb = TensorDictPrioritizedReplayBuffer(storage=LazyTensorStorage(args.buffer_size), alpha=args.pr_alpha, beta=args.pr_beta)
+    else: 
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(args.buffer_size))
+
+    # rb = rb_class(
+    #     args.buffer_size,
+    #     envs.single_observation_space,
+    #     envs.single_action_space,
+    #     device,
+    #     n_envs=args.num_envs,
+    #     handle_timeout_termination=False, 
+    #     **rb_kwargs, 
+    # )
     start_time = time.time()
 
     # NOTE: CHANGED HERE: moved to seperate function
@@ -317,7 +342,7 @@ def main():
         else:
             if args.pr_enabled:
                 # anneal PER beta to 1
-                rb.beta = min(
+                rb.sampler.beta = min(
                     1.0, args.pr_beta + global_step * (1.0 - args.pr_beta) / args.total_timesteps
                 )
 
@@ -332,12 +357,11 @@ def main():
                     actions += args.noise_sigma * noise[env_indices, :, episode_steps]
                 actions = actions.clip(envs.single_action_space.low, envs.single_action_space.high)
 
-        # TRY NOT TO MODIFY: execute the game and log data.
+        # TRY NOT TO MODIFY: execute the game and log data
         next_obs, extrinsic_rewards, terminations, truncations, infos = envs.step(actions)
         
         episode_steps += 1 # NOTE: ADDED HERE for noise
 
-        # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "episode" in infos: 
             env_has_info = infos["_episode"]
             mean_episode_len = infos["episode"]['l'][env_has_info].mean()
@@ -367,7 +391,7 @@ def main():
                 real_next_obs[idx] = infos["final_observation"][idx]
 
         # NOTE: added intrinsic rewards to replay buffer
-        rb.add(obs, real_next_obs, actions, extrinsic_rewards, intrinsic_rewards, terminations, infos) 
+        rb_add(rb, obs, real_next_obs, actions, extrinsic_rewards, intrinsic_rewards, terminations, infos)
 
         if args.self_play_reuse_opponent_exp: 
             # NOTE added re-using opponent experience in self-play
@@ -376,7 +400,7 @@ def main():
             opponent_actions = infos["action_agent_two"]
             opponent_extrinsic_rewards = infos["reward_agent_two"]
             # NOTE: used same intrinsic reward for opponent (next state is the same)
-            rb.add(opponent_obs, real_next_obs, opponent_actions, opponent_extrinsic_rewards, intrinsic_rewards, terminations, infos)
+            rb_add(rb, opponent_obs, real_next_obs, opponent_actions, opponent_extrinsic_rewards, intrinsic_rewards, terminations, infos)
 
 
         # NOTE: ADDED HERE for noise computation 
@@ -402,52 +426,49 @@ def main():
             # END OF NOTE 
 
             with torch.no_grad():
-                clipped_noise = (torch.randn_like(data.actions, device=device) * args.policy_noise).clamp(
+                clipped_noise = (torch.randn_like(data["action"], device=device) * args.policy_noise).clamp(
                     -args.noise_clip, args.noise_clip
                 ) * target_actor.action_scale
 
-                next_state_actions = torch.clamp((target_actor(data.next_observations) + clipped_noise), 
+                next_state_actions = torch.clamp((target_actor(data["next_observation"]) + clipped_noise), 
                     action_clamp_low, action_clamp_high
                 )
-                qf1_next_target = qf1_target(data.next_observations, next_state_actions)
-                qf2_next_target = qf2_target(data.next_observations, next_state_actions)
+                qf1_next_target = qf1_target(data["next_observation"], next_state_actions)
+                qf2_next_target = qf2_target(data["next_observation"], next_state_actions)
                 min_qf_next_target = torch.min(qf1_next_target, qf2_next_target)
 
                 # NOTE: added intrinsic reward here
                 if args.rnd_recompute_int_reward_on_replay: 
-                    data_intrinsic_rewards = torch.from_numpy(compute_intrinsic_reward(data.next_observations, False)).to(device)
+                    data_intrinsic_rewards = torch.from_numpy(compute_intrinsic_reward(data["next_observation"], False)).to(device)
                 else: 
-                    data_intrinsic_rewards = data.intrinsic_rewards
-                data_total_rewards = args.rnd_ext_coef * data.extrinsic_rewards + args.rnd_int_coef * data_intrinsic_rewards
+                    data_intrinsic_rewards = data["intrinsic_reward"]
+                data_total_rewards = args.rnd_ext_coef * data["extrinsic_reward"] + args.rnd_int_coef * data_intrinsic_rewards
                 
-                next_q_value = data_total_rewards.flatten() + (1 - data.dones.flatten()) * args.gamma * (min_qf_next_target).view(-1)
+                next_q_value = data_total_rewards.flatten() + (~data["done"].flatten()) * args.gamma * (min_qf_next_target).view(-1)
                 # END OF NOTE 
 
 
-            qf1_a_values = qf1(data.observations, data.actions).view(-1)
-            qf2_a_values = qf2(data.observations, data.actions).view(-1)
+            qf1_a_values = qf1(data["observation"], data["action"]).view(-1)
+            qf2_a_values = qf2(data["observation"], data["action"]).view(-1)
             # dont take mean yet, need individual losses for prioritized replay
             qf1_loss = F.mse_loss(qf1_a_values, next_q_value, reduction="none")
             qf2_loss = F.mse_loss(qf2_a_values, next_q_value, reduction="none")
             
             # NOTE: apply importance sampling weights to the loss for prioritized replay
-            loss_factor = 1 if not args.pr_enabled else data.weights
+            loss_factor = 1 if not args.pr_enabled else data["priority_weight"]
             qf_loss = ((qf1_loss + qf2_loss) * loss_factor).mean()
 
             # NOTE: added priority update here
             # apply importance sampling weights to the loss
             # update priorities
             if args.pr_enabled:
-                assert isinstance(data, PrioritizedBatch)
-                assert isinstance(rb, PrioritizedReplayBuffer)
-
                 q_err1 = torch.abs(qf1_a_values - next_q_value).cpu().detach().numpy()
                 q_err2 = torch.abs(qf2_a_values - next_q_value).cpu().detach().numpy()
-                new_priorities = np.min(q_err1, q_err2) # use minimum of the two TD errors for priority update
-                rb.update_priorities(data.indices, new_priorities)
+                new_priorities = np.minimum(q_err1, q_err2) # use minimum of the two TD errors for priority update
+                rb.update_priority(data["index"], new_priorities)
 
             # NOTE: added RND loss here
-            rnd_next_obs = normalize_obs(data.next_observations) # NOTE: simplified here and moved to separate function
+            rnd_next_obs = normalize_obs(data["next_observation"]) # NOTE: simplified here and moved to separate function
             predict_next_state_feature, target_next_state_feature = rnd_model(rnd_next_obs) # NOTE: removed mb_inds here!
             rnd_loss = F.mse_loss(
                 predict_next_state_feature, target_next_state_feature.detach(), reduction="none"
@@ -470,7 +491,7 @@ def main():
             q_optimizer.step()
 
             if global_step % args.policy_frequency == 0:
-                actor_loss = -qf1(data.observations, actor(data.observations)).mean()
+                actor_loss = -qf1(data["observation"], actor(data["observation"])).mean()
                 # actor_loss = -qf1(data.observations, actor(data.observations)).view(-1)
                 # actor_loss = (actor_loss * loss_factor).mean() # apply importance sampling weights to the loss and mean
                 actor_optimizer.zero_grad()
@@ -503,11 +524,14 @@ def main():
                 writer.add_scalar("charts/env_step", global_step*args.num_envs, global_step)
                 
                 writer.add_scalar("rnd/intrinsic_reward_replay", data_intrinsic_rewards.mean(), global_step)
-                writer.add_scalar("rnd/extrinsic_reward_replay", data.extrinsic_rewards.mean(), global_step)
+                writer.add_scalar("rnd/extrinsic_reward_replay", data["extrinsic_reward"].mean(), global_step)
                 writer.add_scalar("rnd/total_reward_replay", data_total_rewards.mean(), global_step)
                 if args.rnd_recompute_int_reward_on_replay: 
-                    writer.add_scalar("rnd/intrinsic_reward_replay_recompute_diff", (data.intrinsic_rewards - data_intrinsic_rewards).mean(), global_step)
-            
+                    writer.add_scalar("rnd/intrinsic_reward_replay_recompute_diff", (data["intrinsic_reward"] - data_intrinsic_rewards).mean(), global_step)
+
+                if args.pr_enabled:
+                    writer.add_scalar("charts/pr_beta", rb.sampler.beta, global_step)
+
             # NOTE: ADDED HERE
             if (global_step+1) % 1000 == 0: 
                 print("Saving intermediate model")

@@ -121,8 +121,20 @@ def evaluate(
             opponent = load_actor(opponent, env, device)
             eval_opponents.append((name, HockeyPlayer(opponent, player_num=len(eval_opponents), player_name=name)))
 
-    return _evaluate_opponent_pool(env, unwrapped_env, n_eval_episodes, actor, eval_opponents, render)
-
+    results = _evaluate_opponent_pool(env, unwrapped_env, n_eval_episodes, actor, eval_opponents, render)
+    
+    current_results = {}
+    
+    for opponent_name, opponent_results in results.items():
+        if opponent_name.startswith("current_"):
+            for r, value in opponent_results.items():
+                if r not in current_results:
+                    current_results[r] = []
+                current_results[r].append(value)
+    for i, _ in enumerate(unwrapped_train_envs): 
+        results.pop(f"current_{i}")
+    results["current"] = {r: np.mean(values) for r, values in current_results.items()}
+    return results
 
 def run_evaluation(player_path, n_episodes=10, render=True, seed=42, hockey_mode=Mode.NORMAL, use_default_opponents=True, custom_opponents=None, device = "cpu"):
     _set_seed(seed) 
