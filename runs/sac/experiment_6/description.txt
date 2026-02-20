@@ -1,0 +1,8 @@
+use 
+alphas=(0.0)
+betas=(2)
+sigmas=(0.01)
+update_ratios=(10 20)
+num_q_values=(5 10)
+
+and check how update ratios and num_q_values effects learning, time scale added in exp_7

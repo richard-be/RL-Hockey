@@ -24,22 +24,32 @@
 # here will be your commands for running the script
 
 
-alphas=(0.0 0.1 0.2 0.3)
-betas=(0 1 2)
+alphas=(0.0)
+betas=(2)
+sigmas=(0.01)
+update_ratios=(10)
+num_q_values=(5 10)
 combinations=()
 for b in "${betas[@]}"; do
     for a in "${alphas[@]}"; do
-        combinations+=("$b $a false")
+        for sigma in "${sigmas[@]}"; do
+            for num_q in "${num_q_values[@]}"; do
+                for update_ratio in "${update_ratios[@]}"; do
+                    combinations+=("$b $a false $sigma $num_q $update_ratio 200000")
+                done
+            done
+        done
     done
-    combinations+=("$b $a True")
 done
 
+combinations+=("$b $a false $sigma 5 20 200000")
+combinations+=("$b $a false $sigma 2 1 400000")
 i=0
 gpu_ids=(0 1 2 3)
 max_concurrent=4
 
 for PARAM in "${combinations[@]}"; do
-    read beta alpha autotune <<< "$PARAM"
+    read beta alpha autotune sigma num_q update_ratio timesteps <<< "$PARAM"
     
     export CUDA_VISIBLE_DEVICES="${gpu_ids[i % 4]}"
     i=$((i+1))
@@ -48,14 +58,14 @@ for PARAM in "${combinations[@]}"; do
       --bind $PWD:/workspace \
       $PWD/singularity/images/rl_hockey.simg \
       python3 /workspace/src/sac/run_training.py \
-      --alpha "$alpha" --beta "$beta" --total-timesteps 400000 --track --num-envs 4
+      --alpha "$alpha" --beta "$beta" --total-timesteps "$timesteps" --track --num-envs 4 --no-weak-opponent --no-self-play --sigma "$sigma" --num-q "$num_q" --update-ratio "$update_ratio"
     )
 
     if [[ "$autotune" == "false" ]]; then
         cmd+=(--no-autotune)
     fi
 
-    echo "Running experiment: alpha=$alpha beta=$beta autotune=$autotune"
+    echo "Running experiment: alpha=$alpha beta=$beta autotune=$autotune sigma=$sigma"
     "${cmd[@]}" &
 
     # throttle: wait every 4 jobs
@@ -65,6 +75,4 @@ for PARAM in "${combinations[@]}"; do
 
 done
 wait
-
-
 

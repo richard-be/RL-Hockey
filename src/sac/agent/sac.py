@@ -37,8 +37,10 @@ class Args:
     """total timesteps of the experiments"""
     num_envs: int = 1
     """the number of parallel game environments"""
-    self_play_len: int=5
+    self_play_len: int=10
     """the sliding windows size of versions of the agent himself to train against"""
+    self_play: bool = True
+    """whether to include self play and sampler in training"""
 
     #Algorithm specific arguments
     buffer_size: int = int(1e6)
@@ -67,6 +69,16 @@ class Args:
     """colored noise exponent"""
     sigma: float = 0.1
     """colored noise scaling"""
+    freeze_start: float = 2e5
+    """when to start freezing actors for self play"""
+    freeze_freq: float = 1e6
+    """number of steps until actor gets frozen for self play"""
+    num_q: int = 10
+    """number of q networks in ensemble"""
+    num_min_q: int = 2
+    """number of q networks used for optimization of policy"""
+    update_ratio: int = 20
+    """number of gradient steps per environment step"""
 
 class ReplayBufferSamples(NamedTuple):
     observations: torch.Tensor
@@ -130,7 +142,7 @@ class Actor(nn.Module):
 
         return mean, log_std
 
-    def get_action(self, x):
+    def act(self, x):
         mean, log_std = self(x)
         std = log_std.exp()
         normal = torch.distributions.Normal(mean, std)
