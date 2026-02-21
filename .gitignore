@@ -5,7 +5,6 @@ singularity/images/
 .DS_Store
 test
 .vscode
-models
 wandb
 videos
 old_runs
