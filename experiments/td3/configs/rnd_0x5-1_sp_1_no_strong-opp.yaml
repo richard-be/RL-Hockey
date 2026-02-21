@@ -1,0 +1,9 @@
+exp_name: rnd_0x5-1_sp_1_no_strong-opp
+
+rnd_int_coef: 0.5
+rnd_ext_coef: 1
+is_self_play: true
+
+self_play_initial_opponents:
+  - - weak
+    - 1200
