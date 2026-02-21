@@ -8,14 +8,14 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
-from agent.buffers import ReplayBuffer
-from agent.sac import Args
-from agent.sac import Actor
-from agent.sac import SoftQNetwork
-import env.custom_hockey as c_env
-import env.wrappers as wrappers
+from src.sac.agent.buffers import ReplayBuffer
+from src.sac.agent.sac import Args
+from src.sac.agent.sac import Actor
+from src.sac.agent.sac import SoftQNetwork
+import src.sac.env.custom_hockey as c_env
+import src.sac.env.wrappers as wrappers
 import hockey.hockey_env as h_env
-from env.colored_noise import generate_colored_noise
+from src.sac.env.colored_noise import generate_colored_noise
 import copy
 
 def make_env(seed, episode_count, device, weak_opponent, self_play, elo_system, env_mode="NORMAL", opponent_sampler=None):
@@ -45,7 +45,7 @@ def reset_noise(i, noise, beta, samples, action_shape):
     noise[i] = np.array([generate_colored_noise(samples, beta) for _ in range(action_shape)])
     return noise
 
-if __name__ == "__main__":
+def main():
     args = tyro.cli(Args)
     run_name = f"{args.exp_name}_{args.num_q}_{args.update_ratio}_{args.total_timesteps}_{int(time.time())}"
 
