@@ -24,14 +24,16 @@ class CrossQOpponent:
 
     def act(self, obs):
         with torch.no_grad():
+            self.actor.eval()
             _, _, action = self.actor.get_action(torch.from_numpy(obs).to(torch.float32).to(self.device).unsqueeze(0))
+            self.actor.train()
             return action.squeeze(0).detach().cpu().numpy()
     
 
 def construct_crossq_opponent(policy: GaussianPolicy, device: str = "cpu", copy: bool = True):
     if copy:
         policy = deepcopy(policy)
-    policy.eval()
+        policy.eval()
     return CrossQOpponent(actor=policy, device=device)
     
 
@@ -56,7 +58,7 @@ class OpponentPool:
         
     def add_agent(self, agent:AgenticOpponent, score: float) -> None:
         self.opponent_pool[f"agent_{self.agent_idx}"] = agent
-        self.opponent_pool[f"agent_{self.agent_idx}"] = score
+        self.score_pool[f"agent_{self.agent_idx}"] = score
         self.agent_idx += 1
 
     def update_opponent_score(self, new_score: float, agent: str) -> None:
