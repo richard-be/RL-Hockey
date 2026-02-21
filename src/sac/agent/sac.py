@@ -43,6 +43,8 @@ class Args:
     """whether to include self play and sampler in training"""
     elo_update_frequency: int = 10000
     """after how many games we update the self play queue based on elo"""
+    winrate_window_size: int = 50
+    """size of the moving window over which the winrate is logged"""
 
     #Algorithm specific arguments
     buffer_size: int = int(1e6)
