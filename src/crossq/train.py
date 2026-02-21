@@ -195,7 +195,7 @@ def fit_cross_q(config: CrossQConfig):
 
     if config.env.opponent_type == "selfplay":
         opponent_pool.current_policy = construct_crossq_opponent(agent.policy, device=config.agent_config.device, copy=False)
-        opponent_pool.add_agent(construct_crossq_opponent(agent.policy, device=config.agent_config.device), elo_score)
+        # opponent_pool.add_agent(construct_crossq_opponent(agent.policy, device=config.agent_config.device), elo_score)
     #     env.close()
     #     elo_score = config.env.initial_elo
     #     env: HockeyEnv_SelfPlay = create_environment(config.env, custom_opponent=construct_crossq_opponent(agent.policy, device=config.agent_config.device))
@@ -316,8 +316,8 @@ def fit_cross_q(config: CrossQConfig):
                 writer.add_scalar(f"Grad/Actor_{layer_name}", norm, step)
 
         if (step + 1) % config.save_freq == 0:
-            os.makedirs(f"models/crossq/{step + 1}/", exist_ok=True)
-            torch.save(agent.state(), f"models/crossq/{step + 1}/model.pkl") 
+            os.makedirs(f"models/crossq/{identifier}/{step + 1}/", exist_ok=True)
+            torch.save(agent.state(), f"models/crossq/{identifier}/{step + 1}/model.pkl") 
 
         if is_hockey(config.env.env_id) and config.env.opponent_type == "selfplay":
             if (step + 1) % config.env.opponent_save_steps == 0:  # start adding previous checkpints after warmup period
@@ -327,8 +327,8 @@ def fit_cross_q(config: CrossQConfig):
         if (step + 1) % config.eval_freq == 0:
             eval(agent, config.env, writer, step, identifier=identifier)
 
-    os.makedirs(f"models/crossq/final/", exist_ok=True)
-    torch.save(agent.state(), f"models/crossq/final/model.pkl") 
+    os.makedirs(f"models/crossq/{identifier}/final/", exist_ok=True)
+    torch.save(agent.state(), f"models/crossq/{identifier}/final/model.pkl") 
     envs.close()
 
 
