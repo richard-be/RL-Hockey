@@ -28,51 +28,54 @@ class CrossQOpponent:
             return action.squeeze(0).detach().cpu().numpy()
     
 
-def construct_crossq_opponent(policy: GaussianPolicy, device: str = "cpu"):
-    policy = deepcopy(policy)
+def construct_crossq_opponent(policy: GaussianPolicy, device: str = "cpu", copy: bool = True):
+    if copy:
+        policy = deepcopy(policy)
     policy.eval()
     return CrossQOpponent(actor=policy, device=device)
     
 
 class OpponentPool:
-    def __init__(self, latest_agent: AgenticOpponent | None, 
-                 latest_agent_score: float,
+    def __init__(self,
                  window_size: int,
-                 play_against_latest_model_ratio: float):
+                 play_against_latest_model_ratio: float,
+                 current_policy: AgenticOpponent | None = None,
+                 fixed_agents: list[tuple[AgenticOpponent, float]] | None = None):
                  
         self.window_size = window_size
         self.play_against_latest_model_ratio = play_against_latest_model_ratio
-        self.opponent_pool: list[AgenticOpponent] = list([latest_agent] if latest_agent else [])
-        self.score_pool: list[float] = list([latest_agent_score] if latest_agent else [])
-        self.current_agent_idx = -1
+        self.fixed_agent_buffer_size = len(fixed_agents)
+        self.opponent_pool: dict[str, AgenticOpponent] = dict()
+        self.score_pool: dict[str, float] = dict()
+        self.current_policy = current_policy
+        if fixed_agents:
+            for idx, (agent, score) in enumerate(fixed_agents):
+                self.opponent_pool[f"fixed_{idx}"] = agent
+                self.score_pool[f"fixed_{idx}"] = score
+        self.agent_idx = 0
         
     def add_agent(self, agent:AgenticOpponent, score: float) -> None:
-        if len(self.opponent_pool) == self.window_size:
-            self.opponent_pool.pop(0)
-            self.score_pool.pop(0)
-        self.score_pool.append(score)
-        self.opponent_pool.append(agent)
-        if self.current_agent_idx:
-            self.current_agent_idx -= 1
+        self.opponent_pool[f"agent_{self.agent_idx}"] = agent
+        self.opponent_pool[f"agent_{self.agent_idx}"] = score
+        self.agent_idx += 1
 
-    def update_opponent_score(self, new_score) -> None:
-        self.score_pool[self.current_agent_idx] = new_score
+    def update_opponent_score(self, new_score: float, agent: str) -> None:
+        self.score_pool[agent] = new_score
 
-    def get_opponent_score(self) -> float:
-        return self.score_pool[self.current_agent_idx]
+    def get_opponent_score(self, agent: str) -> float | None:
+        return self.score_pool[agent] if agent != 'current' else None
+    
+    def sample_fixed_agent(self) -> tuple[AgenticOpponent, str]:
+        agent = np.random.choice([agent_name for agent_name in self.opponent_pool.keys() if "fixed" in agent_name]).item()
+        return self.opponent_pool[agent], agent
 
-    def sample_opponent(self) -> AgenticOpponent:
+    def sample_opponent(self) -> tuple[AgenticOpponent, str]:
         if random.random() <= self.play_against_latest_model_ratio:
-            self.current_agent_idx = len(self.opponent_pool) - 1
-            return self.opponent_pool[self.current_agent_idx]  
+            return self.current_policy, "current"
         else:
-            # weighted choice by elo scores
-            scores = np.array(self.score_pool)
-            scores = scores / scores.sum()
-
-            idx = np.random.choice(list(range(len(self.opponent_pool))), p=scores).item()
-            self.current_agent_idx = idx
-            return self.opponent_pool[idx]
+            ids = [f"fixed_{idx}" for idx in range(self.fixed_agent_buffer_size)] + [f"agent_{idx}" for idx in range(max(self.agent_idx - self.window_size, 0), self.agent_idx)]
+            agent = np.random.choice(ids).item()
+            return self.opponent_pool[agent], agent
             
 
 class HockeyEnv_AgenticOpponent(h_env.HockeyEnv):
@@ -92,28 +95,45 @@ class HockeyEnv_SelfPlay(h_env.HockeyEnv):
     def __init__(self, opponent_pool: OpponentPool, 
                  mode=h_env.Mode.NORMAL,
                  swap_steps: int = 30_000,
+                 warmup_period: int = 50_000
                  ):
+        self.opponent_idx = "current"
         super().__init__(mode=mode, keep_mode=True)
         self.pool = opponent_pool
         self.action_space = gym.spaces.Box(-1, +1, (4,), dtype=np.float32)
         self.swap_steps = swap_steps
+        self.warmup_period = warmup_period
         self.num_steps = 0
+        
 
     # def add_agent(self, agent: AgenticOpponent, score: float | None = None) -> None:
     #     self.pool.add_agent(agent, score=score if score is not None else self.default_score)
 
     def _swap_agent(self) -> None:
-        self.opponent = self.pool.sample_opponent()
+        self.opponent, self.opponent_idx = self.pool.sample_opponent()
 
-    def get_opponent_score(self) -> float:
-        return self.pool.get_opponent_score()
+    def _sample_fixed_opponent(self) -> None:
+        self.opponent, self.opponent_idx = self.pool.sample_fixed_agent()
+
+    def get_opponent_score(self) -> float | None:
+        return self.pool.get_opponent_score(agent=self.opponent_idx)
 
     def update_opponent_score(self, new_score: float) -> None:
-        self.pool.update_opponent_score(new_score=new_score)
+        self.pool.update_opponent_score(new_score=new_score, agent=self.opponent_idx)
+
+    def _get_info(self):
+        info =  super()._get_info()
+        info['opponent'] = self.opponent_idx
+        return info
 
     def step(self, action):
         if self.num_steps % self.swap_steps == 0:
-            self._swap_agent()
+            if self.num_steps <= self.warmup_period:
+                self._sample_fixed_opponent()
+            else:
+                self._swap_agent()
+
+            self._get_info
 
         self.num_steps += 1
         ob2 = self.obs_agent_two()

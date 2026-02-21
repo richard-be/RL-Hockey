@@ -4,10 +4,10 @@ from models.feedforward import FeedForward, NNConfig
 
 
 @torch.no_grad()
-def project_weight_to_norm_ball(module: torch.nn.Linear, scale: float | None = 1):
+def project_weight_to_norm_ball(module: torch.nn.Linear, scale: float | None  = None):
     weight, bias = module.weight, module.bias
     if not scale:
-        scale = math.sqrt(module.weight.shape[0] / 3)  # expected norm under pytorch's initialization U(- 1/ sqrt(fan_in), 1 / sqrt(fan_in))
+        scale = math.sqrt(module.weight.shape[0] * 2)  # expected norm under He initialization
     vec = torch.concat([weight.view(-1), bias.view(-1)])
     n = vec.norm(p=2)
 

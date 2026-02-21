@@ -40,10 +40,11 @@ class EnvConfig:
     # selfplay elements
     play_against_latest_model_ratio: float = .5
     window_size: int = 10
-    swap_steps: int = 60_000
-    opponent_save_steps: int = 30_000
+    swap_steps: int = 30_000
+    opponent_save_steps: int = 50_000
+    warmup_period: int = 60_000
 
-    initial_elo: float = 12000.0
+    initial_elo: float = 1200.0
     k_factor: int = 16
 
 @dataclass
@@ -73,7 +74,8 @@ def create_environment(env_config: EnvConfig, custom_opponent: None | AgenticOpp
         if env_config.mode == h_env.Mode.NORMAL:
             if env_config.opponent_type == 'selfplay' and opponent_pool:
                 env = HockeyEnv_SelfPlay(opponent_pool=opponent_pool, 
-                                         swap_steps=env_config.swap_steps)
+                                         swap_steps=env_config.swap_steps,
+                                         warmup_period=env_config.warmup_period)
             elif env_config.opponent_type == 'custom' and custom_opponent:
                 env = HockeyEnv_AgenticOpponent(opponent=custom_opponent)
             else:
@@ -139,6 +141,8 @@ def eval(agent: CrossQAgent,
     
     for name, env in envs.items():
         observation, info = env.reset()
+        env.observation_space.dtype = np.float32
+        print(observation.shape, observation.dtype)
         while True:
             action = agent.act(observation[np.newaxis, :]).cpu().numpy()
             observation, _, terminated, truncated, info = env.step(action)
@@ -167,10 +171,10 @@ def fit_cross_q(config: CrossQConfig):
     # env = create_environment(config.env)
     if config.env.opponent_type == "selfplay":
         elo_score = config.env.initial_elo
-        opponent_pool = OpponentPool(latest_agent=None, 
-                                     latest_agent_score=elo_score,
-                                     window_size=config.env.window_size,
-                                     play_against_latest_model_ratio=config.env.play_against_latest_model_ratio)
+        opponent_pool = OpponentPool(window_size=config.env.window_size,
+                                     play_against_latest_model_ratio=config.env.play_against_latest_model_ratio,
+                                     fixed_agents=[(h_env.BasicOpponent(), 1200),
+                                                   (h_env.BasicOpponent(weak=False), 1500)])
     envs = gym.vector.SyncVectorEnv([partial(create_environment, config.env, 
                                              opponent_pool=opponent_pool if config.env.opponent_type == "selfplay" else None) for _ in  range(config.num_envs)])
 
@@ -190,6 +194,7 @@ def fit_cross_q(config: CrossQConfig):
     
 
     if config.env.opponent_type == "selfplay":
+        opponent_pool.current_policy = construct_crossq_opponent(agent.policy, device=config.agent_config.device, copy=False)
         opponent_pool.add_agent(construct_crossq_opponent(agent.policy, device=config.agent_config.device), elo_score)
     #     env.close()
     #     elo_score = config.env.initial_elo
@@ -224,10 +229,10 @@ def fit_cross_q(config: CrossQConfig):
         agent.store_transition(observation, action, real_next_obs, reward, terminated, info)
         observation = next_observation
         if "final_info" in info:
-            num_episodes += 1
             if config.use_tensorboard:
                 for env_index, inf in enumerate(info["final_info"]):
                     if inf is None: continue
+                    num_episodes += 1
                     writer.add_scalar("Env/Return", inf['episode']['r'], step)
                     writer.add_scalar("Env/Length", inf['episode']['l'], step)
                     if is_hockey(config.env.env_id):
@@ -244,18 +249,21 @@ def fit_cross_q(config: CrossQConfig):
                         writer.add_scalar("Env/LossRate", running_stats['loss'] / num_episodes, step)
                         writer.add_scalar("Env/WinLossRatio", running_stats['win'] / running_stats['loss'] if running_stats['loss'] != 0 else 0, step)
                         if config.env.opponent_type == 'selfplay':
-                            elo_score_opponent = opponent_pool.get_opponent_score()
-                            elo_score, elo_score_opponent = update_elo_ratings(elo_score, elo_score_opponent, k_factor=config.env.k_factor, result=winner)
-                            opponent_pool.update_opponent_score(new_score=elo_score_opponent)
+                            opponent = inf['opponent']
+                            elo_score_opponent = opponent_pool.get_opponent_score(agent=opponent)
+                            elo_score, elo_score_opponent = update_elo_ratings(elo_score, elo_score_opponent if elo_score_opponent else elo_score,
+                                                                                k_factor=config.env.k_factor, result=winner)
+                            if elo_score_opponent is not None:
+                                opponent_pool.update_opponent_score(new_score=elo_score_opponent, agent=opponent)
                             # env.unwrapped.update_opponent_score(new_score=elo_score_opponent)
-                            writer.add_scalar("Env/ELO_A", elo_score, step)
-                            writer.add_scalar("Env/ELO_B", elo_score_opponent, step)
+                            writer.add_scalar("ELO/ELO_Self", elo_score, step)
+                            writer.add_scalar(f"ELO/ELO_{opponent}", elo_score_opponent, step)
 
-            observation, info = envs.reset()
+            # observation, info = envs.reset()
         
         update_policy = (step + 1) % config.agent_config.policy_delay == 0
         compute_logs = (step + 1) % config.log_freq == 0
-        logs = agent.learn(update_policy=update_policy, compute_logs=compute_logs, normalize= step > 5_000)
+        logs = agent.learn(update_policy=update_policy, compute_logs=compute_logs)
 
         if (step + 1) % config.log_freq == 0:
 
@@ -312,9 +320,8 @@ def fit_cross_q(config: CrossQConfig):
             torch.save(agent.state(), f"models/crossq/{step + 1}/model.pkl") 
 
         if is_hockey(config.env.env_id) and config.env.opponent_type == "selfplay":
-            if (step + 1) % config.env.opponent_save_steps == 0:
+            if (step + 1) % config.env.opponent_save_steps == 0:  # start adding previous checkpints after warmup period
                 opponent_pool.add_agent(construct_crossq_opponent(agent.policy, device=config.agent_config.device), elo_score)
-                # env.unwrapped.add_agent(construct_crossq_opponent(agent.policy, device=config.agent_config.device), elo_score)
          
 
         if (step + 1) % config.eval_freq == 0:
