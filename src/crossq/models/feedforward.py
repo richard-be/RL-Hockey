@@ -33,6 +33,17 @@ class NNConfig:
     normalization_config: NormalizationConfig = field(default_factory=NormalizationConfig)
     
 
+
+def weights_init_(m) -> None:
+    """
+    Method for initialisation of weights with He initialization
+    """
+    if isinstance(m, nn.Linear):
+        torch.nn.init.kaiming_normal_(m.weight, nonlinearity="relu")
+        if hasattr(m, 'bias') and m.bias is not None:
+            torch.nn.init.constant_(m.bias, 0)
+
+
 class FeedForward(nn.Module):
 
     def __init__(self, config: NNConfig,
@@ -94,7 +105,7 @@ class FeedForward(nn.Module):
                 output_layers.append(fc_out)
 
         self.output_layers = nn.ModuleList(output_layers)
-            
+        self.apply(weights_init_)  # initialize weight
 
 
     
