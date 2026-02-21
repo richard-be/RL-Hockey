@@ -3,7 +3,7 @@ import numpy as np
 from hockey.hockey_env import BasicOpponent, Mode
 from time import sleep
 import random
-from .env import HockeyPlayer, make_hockey_eval_env, OpponentActor, load_actor
+from ..env import HockeyPlayer, make_hockey_eval_env, OpponentActor, load_actor
 from .td3 import Actor
 import gymnasium as gym
 from tqdm import tqdm

@@ -4,7 +4,7 @@ from gymnasium import spaces
 import numpy as np  
 from typing import List
 import torch 
-from .td3 import Actor
+from .algorithm.td3 import Actor
 import pygame
 
 # NOTE: original env creation function 
@@ -195,8 +195,8 @@ def make_hockey_eval_env(seed, idx=0, mode=Mode.NORMAL):
     return thunk
 
 def load_actor(run_name: str, env, device="cpu"):
-    from .td3 import Actor as TD3Actor
-    from .externals.sac import Actor as SACActor
+    from .algorithm.td3 import Actor as TD3Actor
+    from ..sac.agent.sac import Actor as SACActor
 
     def add_act_method(actor):
         def act(self, obs): 
@@ -232,6 +232,11 @@ def load_actor(run_name: str, env, device="cpu"):
 
     print(f"Loaded model from {path}")
     
+    if not hasattr(env, "single_observation_space"):
+        env.single_observation_space = env.observation_space
+    if not hasattr(env, "single_action_space"):
+        env.single_action_space = env.action_space
+
     actor = actor_class(env)
     actor.load_state_dict(actor_state)
     add_act_method(actor)
