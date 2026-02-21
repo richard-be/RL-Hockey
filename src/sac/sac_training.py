@@ -18,6 +18,7 @@ import hockey.hockey_env as h_env
 from src.sac.env.colored_noise import generate_colored_noise
 import copy
 from collections import deque
+from src.td3.algorithm.td3 import Actor as Td3_Actor
 
 def make_env(seed, episode_count, device, weak_opponent, self_play, elo_system, env_mode="NORMAL", opponent_sampler=None):
     def thunk():
@@ -86,6 +87,12 @@ def main():
         params += list(q_networks[i].parameters())
     q_optimizer = optim.Adam(params, lr=args.q_lr)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
+
+    #initialization of other actors
+    """td3_actor = Td3_Actor(envs).to(device)
+    td3_actor.load_state_dict(torch.load("models/td3/HockeyOne-v0__rnd_0x5-1_sp_1__42__1771317357.model")[0])
+    opponent_sampler.add_custom_opponent(td3_actor, "td3")
+    elo_system.register_player("td3")"""
 
     # Automatic entropy tuning
     if args.autotune:
