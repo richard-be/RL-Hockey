@@ -41,6 +41,8 @@ class Args:
     """the sliding windows size of versions of the agent himself to train against"""
     self_play: bool = True
     """whether to include self play and sampler in training"""
+    elo_update_frequency: int = 10000
+    """after how many games we update the self play queue based on elo"""
 
     #Algorithm specific arguments
     buffer_size: int = int(1e6)
@@ -73,11 +75,11 @@ class Args:
     """when to start freezing actors for self play"""
     freeze_freq: float = 1e6
     """number of steps until actor gets frozen for self play"""
-    num_q: int = 10
+    num_q: int = 2
     """number of q networks in ensemble"""
     num_min_q: int = 2
     """number of q networks used for optimization of policy"""
-    update_ratio: int = 20
+    update_ratio: int = 1
     """number of gradient steps per environment step"""
 
 class ReplayBufferSamples(NamedTuple):

@@ -13,17 +13,19 @@ from agent.sac import Args
 from agent.sac import Actor
 from agent.sac import SoftQNetwork
 import env.custom_hockey as c_env
+import env.wrappers as wrappers
 import hockey.hockey_env as h_env
 from env.colored_noise import generate_colored_noise
 import copy
 
-def make_env(seed, episode_count, device, weak_opponent, self_play, env_mode="NORMAL", opponent_sampler=None):
+def make_env(seed, episode_count, device, weak_opponent, self_play, elo_system, env_mode="NORMAL", opponent_sampler=None):
     def thunk():
         if not self_play:
             env = c_env.HockeyEnv_Custom_BasicOpponent(env_mode, weak_opponent)
         else:
             env = c_env.HockeyEnv_Custom_CustomOpponent(h_env.BasicOpponent(weak=True), device, mode=h_env.Mode[env_mode]) 
-            env = c_env.OpponentResetWrapper(env, opponent_sampler, episode_count)
+            env = wrappers.OpponentResetWrapper(env, opponent_sampler, episode_count)
+            env = wrappers.EloWrapper(env, elo_system)
      
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env.action_space.seed(seed)
@@ -62,11 +64,13 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     
-    opponent_sampler = c_env.OpponentSampler(args.self_play_len)
-    episode_count = c_env.EpisodeCounter()
+    episode_count = wrappers.EpisodeCounter()
+    elo_system = wrappers.EloSystem()
+    opponent_sampler = wrappers.OpponentSampler(args.self_play_len)
+
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.seed + i, episode_count, device, args.weak_opponent, args.self_play, args.env_mode, opponent_sampler) for i in range(args.num_envs)]
+        [make_env(args.seed + i, episode_count, device, args.weak_opponent, args.self_play, elo_system, args.env_mode, opponent_sampler) for i in range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
@@ -111,6 +115,7 @@ if __name__ == "__main__":
     #setup episode steps for noise indexing
     env_indices = np.arange(args.num_envs)
     episode_steps = np.zeros_like(env_indices)
+    frozen_index = 0
 
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
@@ -150,6 +155,7 @@ if __name__ == "__main__":
                         else:
                             opponent = "weak" if args.weak_opponent else "strong"
                         print(f"episode={episode_count.value}, global_step={global_step}, env={env_index}, winner={info['winner']}, SPS={sps}, opponent={opponent}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
+                        print(elo_system.get_elo_dict())
                     if args.track:
                         writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                         writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
@@ -227,16 +233,21 @@ if __name__ == "__main__":
                         alpha_loss.backward()
                         a_optimizer.step()
                         alpha = log_alpha.exp().item()
+            if global_step >= args.freeze_start and global_step % args.elo_update_frequency == 0:
+                #todo only start after freezing also starts
+                opponent_sampler.update_self_play_pool(elo_system.get_elo_dict())
 
             if global_step >= args.freeze_start and global_step % args.freeze_freq == 0 and args.self_play:
                 frozen_actor = copy.deepcopy(actor)
                 frozen_actor.eval()
                 for p in frozen_actor.parameters():
                     p.requires_grad = False
+                frozen_index += 1
+                opponent_sampler.add_self_play_opponent(frozen_actor, frozen_index)
+                elo_system.register_player(f"self_{frozen_index}")
 
-                opponent_sampler.add_self_play_opponent(frozen_actor)
 
-
+    ##todo regelmäßig elo dict updaten und frozen actor zur elo und zur self_play_queue hinzufügen
     envs.close()
     if args.track:
         writer.close()
