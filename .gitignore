@@ -6,7 +6,6 @@ singularity/images/
 test
 .vscode
 models
-runs 
 wandb
 videos
 old_runs
