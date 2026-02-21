@@ -71,7 +71,7 @@ class Args:
     """colored noise exponent"""
     sigma: float = 0.1
     """colored noise scaling"""
-    freeze_start: float = 2e5
+    freeze_start: float = 1e6
     """when to start freezing actors for self play"""
     freeze_freq: float = 1e6
     """number of steps until actor gets frozen for self play"""
