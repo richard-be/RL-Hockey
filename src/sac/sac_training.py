@@ -248,7 +248,7 @@ def main():
                 #todo only start after freezing also starts
                 opponent_sampler.update_self_play_pool(elo_system.get_elo_dict())
 
-            if global_step >= args.freeze_start and (global_step-args.freeze_start) % args.freeze_freq == 0 and args.self_play:
+            if global_step >= args.freeze_start and global_step % args.freeze_freq == 0 and args.self_play:
                 frozen_actor = copy.deepcopy(actor)
                 frozen_actor.eval()
                 for p in frozen_actor.parameters():
