@@ -1,0 +1,1 @@
+test colored noise and entropy combinations, with all the rewards that are included in the info

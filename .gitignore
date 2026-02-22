@@ -2,9 +2,24 @@
 __pycache__/
 outputs/
 singularity/images/
+<<<<<<< HEAD
 runs/
 src/crossq/models/crossq/
 runs/crossq
 .DS_Store
 models/crossq
 src/crossq/videos
+=======
+.DS_Store
+test
+.vscode
+models
+runs 
+wandb
+videos
+old_runs
+data
+runs_backup
+logs
+data_backup
+>>>>>>> main
