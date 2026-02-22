@@ -17,6 +17,8 @@ import src.sac.env.wrappers as wrappers
 import hockey.hockey_env as h_env
 from src.sac.env.colored_noise import generate_colored_noise
 import copy
+from collections import deque
+from src.td3.algorithm.td3 import Actor as Td3_Actor
 
 def make_env(seed, episode_count, device, weak_opponent, self_play, elo_system, env_mode="NORMAL", opponent_sampler=None):
     def thunk():
@@ -86,6 +88,12 @@ def main():
     q_optimizer = optim.Adam(params, lr=args.q_lr)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
 
+    #initialization of other actors
+    """td3_actor = Td3_Actor(envs).to(device)
+    td3_actor.load_state_dict(torch.load("models/td3/HockeyOne-v0__rnd_0x5-1_sp_1__42__1771317357.model")[0])
+    opponent_sampler.add_custom_opponent(td3_actor, "td3")
+    elo_system.register_player("td3")"""
+
     # Automatic entropy tuning
     if args.autotune:
         target_entropy = -torch.prod(torch.Tensor(envs.single_action_space.shape).to(device)).item()
@@ -116,6 +124,7 @@ def main():
     env_indices = np.arange(args.num_envs)
     episode_steps = np.zeros_like(env_indices)
     frozen_index = 0
+    winrate_window = deque(maxlen=args.winrate_window_size)
 
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
@@ -125,7 +134,7 @@ def main():
         if global_step < args.learning_starts:
             actions = np.array([envs.single_action_space.sample() for _ in range(envs.num_envs)])
         else:
-            actions, _, _ = actor.act(torch.Tensor(obs).to(device))
+            actions, _, _ = actor.get_action(torch.Tensor(obs).to(device))
             actions = actions.detach().cpu().numpy()
             actions = actions + args.sigma * noise[env_indices, :, episode_steps]
             actions = np.clip(actions, -1.0, 1.0)
@@ -148,19 +157,21 @@ def main():
         if "final_info" in infos:
             for env_index, info in enumerate(infos["final_info"]):
                 if info is not None:
+                    winrate_window.append(int(info["winner"]==1))
+
                     if episode_count.value % 50 == 0:
                         sps = int(global_step / (time.time() - start_time))
                         if args.self_play:
                             opponent = envs.envs[env_index].get_opponent_name()
                         else:
                             opponent = "weak" if args.weak_opponent else "strong"
-                        print(f"episode={episode_count.value}, global_step={global_step}, env={env_index}, winner={info['winner']}, SPS={sps}, opponent={opponent}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
+                        print(f"episode={episode_count.value}, global_step={global_step}, env={env_index}, winrate={sum(winrate_window)/len(winrate_window)}, winner={info['winner']}, SPS={sps}, opponent={opponent}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
                         print(elo_system.get_elo_dict())
                     if args.track:
                         writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                         writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
                         writer.add_scalar("charts/time_return", info["episode"]["r"], time.time()-start_time)
-                    break
+                        writer.add_scalar("charts/winrate", sum(winrate_window)/len(winrate_window), global_step)
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()
@@ -178,7 +189,7 @@ def main():
             for g in range(args.update_ratio):
                 data = rb.sample(args.batch_size)
                 with torch.no_grad():
-                    next_state_actions, next_state_log_pi, _ = actor.act(data.next_observations)
+                    next_state_actions, next_state_log_pi, _ = actor.get_action(data.next_observations)
                     q_targets_sample = random.sample(q_targets, k=args.num_min_q)
                     q_next_targets = torch.stack([q(data.next_observations, next_state_actions) for q in q_targets_sample], dim=0)
                     min_qf_next_target = torch.min(q_next_targets, dim=0)[0] - alpha * next_state_log_pi
@@ -216,7 +227,7 @@ def main():
                         writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
             if global_step % args.policy_frequency == 0:  # TD 3 Delayed update support
                 for _ in range(args.policy_frequency):  # compensate for the delay by doing 'actor_update_interval' instead of 1
-                    pi, log_pi, _ = actor.act(data.observations)
+                    pi, log_pi, _ = actor.get_action(data.observations)
                     q_pi = torch.stack([q(data.observations, pi) for q in q_networks], dim=0)
                     actor_loss = ((alpha * log_pi) - torch.mean(q_pi, dim=0)).mean()
 
@@ -226,7 +237,7 @@ def main():
 
                     if args.autotune:
                         with torch.no_grad():
-                            _, log_pi, _ = actor.act(data.observations)
+                            _, log_pi, _ = actor.get_action(data.observations)
                         alpha_loss = (-log_alpha.exp() * (log_pi + target_entropy)).mean()
 
                         a_optimizer.zero_grad()
@@ -237,7 +248,7 @@ def main():
                 #todo only start after freezing also starts
                 opponent_sampler.update_self_play_pool(elo_system.get_elo_dict())
 
-            if global_step >= args.freeze_start and (global_step-args.freeze_start) % args.freeze_freq == 0 and args.self_play:
+            if global_step >= args.freeze_start and global_step % args.freeze_freq == 0 and args.self_play:
                 frozen_actor = copy.deepcopy(actor)
                 frozen_actor.eval()
                 for p in frozen_actor.parameters():

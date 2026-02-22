@@ -26,9 +26,12 @@ from abc import ABC, abstractmethod
 from collections.abc import Generator
 from typing import Any, NamedTuple
 
+import torch 
 import numpy as np
 import torch as th
 from gymnasium import spaces
+from collections import deque
+import collections 
 
 try:
     # Check memory used by replay buffer when possible
@@ -240,6 +243,7 @@ class BaseBuffer(ABC):
         return th.as_tensor(array, device=self.device)
 
 
+
 class ReplayBuffer(BaseBuffer):
     """
     Replay buffer used in off-policy algorithms like SAC/TD3.
@@ -430,3 +434,141 @@ class ReplayBuffer(BaseBuffer):
         if dtype == np.float64:
             return np.float32
         return dtype
+
+# PrioritizedBatch = collections.namedtuple(
+#     "PrioritizedBatch", ["observations", "actions", "rewards", "next_observations", "dones", "indices", "weights"]
+# )
+
+class PrioritizedBatch(NamedTuple): 
+    observations: th.Tensor
+    actions: th.Tensor
+    next_observations: th.Tensor
+    dones: th.Tensor
+    # NOTE: added extrinsic and extrinsic rewards sepeately here
+    extrinsic_rewards: th.Tensor
+    intrinsic_rewards: th.Tensor
+    indices: th.Tensor
+    weights: th.Tensor
+
+
+
+# adapted from: https://github.com/openai/baselines/blob/master/baselines/common/segment_tree.py
+class SumSegmentTree:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.tree_size = 2 * capacity - 1
+        self.tree = np.zeros(self.tree_size, dtype=np.float32)
+
+    def _propagate(self, idx):
+        parent = (idx - 1) // 2
+        while parent >= 0:
+            self.tree[parent] = self.tree[parent * 2 + 1] + self.tree[parent * 2 + 2]
+            parent = (parent - 1) // 2
+
+    def update(self, idx, value):
+        tree_idx = idx + self.capacity - 1
+        self.tree[tree_idx] = value
+        self._propagate(tree_idx)
+
+    def total(self):
+        return self.tree[0]
+
+    def retrieve(self, value):
+        idx = 0
+        while idx * 2 + 1 < self.tree_size:
+            left = idx * 2 + 1
+            right = left + 1
+            if value <= self.tree[left]:
+                idx = left
+            else:
+                value -= self.tree[left]
+                idx = right
+        return idx - (self.capacity - 1)
+
+
+# adapted from: https://github.com/openai/baselines/blob/master/baselines/common/segment_tree.py
+class MinSegmentTree:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.tree_size = 2 * capacity - 1
+        self.tree = np.full(self.tree_size, float("inf"), dtype=np.float32)
+
+    def _propagate(self, idx):
+        parent = (idx - 1) // 2
+        while parent >= 0:
+            self.tree[parent] = min(self.tree[parent * 2 + 1], self.tree[parent * 2 + 2])
+            parent = (parent - 1) // 2
+
+    def update(self, idx, value):
+        tree_idx = idx + self.capacity - 1
+        self.tree[tree_idx] = value
+        self._propagate(tree_idx)
+
+    def min(self):
+        return self.tree[0]
+
+class PrioritizedReplayBuffer(ReplayBuffer):
+    def __init__(
+            self, 
+            buffer_size, 
+            observation_space, 
+            action_space, 
+            device, 
+            n_envs,
+            optimize_memory_usage=False,
+            handle_timeout_termination=False,
+            alpha=0.6, beta=0.4, eps=1e-6
+        ):
+        super().__init__(buffer_size, observation_space, action_space, device, n_envs, optimize_memory_usage=optimize_memory_usage, handle_timeout_termination=handle_timeout_termination)
+        
+        self.device = device
+        self.alpha = alpha
+        self.beta = beta
+        self.eps = eps
+
+        self.max_priority = 1.0
+
+        self.sum_tree = SumSegmentTree(self.buffer_size)
+        self.min_tree = MinSegmentTree(self.buffer_size)
+
+
+    def add(self, obs, next_obs, action, extrinsic_reward, intrinsic_reward, done, infos):
+        # NOTE: removed n-step returns here, not necessary for td3
+        idx = self.pos
+        super().add(obs, next_obs, action, extrinsic_reward, intrinsic_reward, done, infos)
+
+        priority = self.max_priority**self.alpha
+        self.sum_tree.update(idx, priority)
+        self.min_tree.update(idx, priority)
+
+    def sample(self, batch_size) -> PrioritizedBatch:
+        indices = []
+        p_total = self.sum_tree.total()
+        segment = p_total / batch_size
+
+        for i in range(batch_size):
+            a = segment * i
+            b = segment * (i + 1)
+            upperbound = np.random.uniform(a, b)
+            idx = self.sum_tree.retrieve(upperbound)
+            indices.append(idx)
+
+        samples: ReplayBufferSamples = self._get_samples(indices)
+
+        probs = np.array([self.sum_tree.tree[idx + self.buffer_size - 1] for idx in indices])
+        weights = (self.size() * probs / p_total) ** -self.beta
+        weights = weights / weights.max()
+        weights = torch.from_numpy(weights).to(self.device) # .unsqueeze(1)
+        # indices = torch.from_numpy(np.array(indices)).to(self.device) #.unsqueeze(1)
+
+        return PrioritizedBatch(*samples, weights=weights, indices=indices)
+
+    def update_priorities(self, indices, priorities):
+        priorities = np.abs(priorities) + self.eps
+        self.max_priority = max(self.max_priority, priorities.max())
+
+        for idx, priority in zip(indices, priorities):
+            priority = priority**self.alpha
+            self.sum_tree.update(idx, priority)
+            self.min_tree.update(idx, priority)
+
