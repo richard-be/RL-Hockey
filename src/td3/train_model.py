@@ -30,13 +30,28 @@ from dataclasses import asdict
 from .algorithm.rnd import RNDModel, RunningMeanStd
 # from .algorithm.colored_noise import reset_noise
 # from ..sac.env.colored_noise import reset_noise
-from ..sac.sac_training import reset_noise
+# from ..sac.sac_training import reset_noise
+from ..sac.env.colored_noise import generate_colored_noise
 from gymnasium.wrappers.vector import RecordEpisodeStatistics
 from typing import Tuple, Optional
 from .env import load_actor, disable_gradients
 import yaml
 
 
+# NOTE: taken from Richard's implementation. 
+def reset_noise(i, noise, beta, samples, action_shape):
+    """
+    Recreate colored noise arrays
+    
+    :param i: Description
+    :param noise: old noise array
+    :param beta: noise exponent
+    :param samples: number of samples
+    :param action_shape: shape of one action
+    """
+    noise[i] = np.array([generate_colored_noise(samples, beta) for _ in range(action_shape)])
+    return noise
+# END OF NOTE 
 
 @dataclass
 class Args:
@@ -131,6 +146,7 @@ class Args:
     pr_alpha: float = 0.5
     pr_beta: float = 0.4
     pr_enabled: bool = False
+    pr_factor_int_reward: float = 0
 
     config: Optional[str] = None
     # NOTE: end of change
@@ -319,7 +335,7 @@ def main():
         return ((obs - torch.tensor(obs_rms.mean, device=device, dtype=torch.float32)) / 
                         torch.sqrt(torch.tensor(obs_rms.var, device=device, dtype=torch.float32) + eps)).clamp(*clamp_range)
     
-    def compute_intrinsic_reward(next_obs, update_obs_rms=True): 
+    def compute_intrinsic_reward(next_obs, update_obs_rms=True, norm_by_mean=False): 
         with torch.no_grad():
             rnd_next_obs = normalize_obs(next_obs) # NOTE: similified and moved to separate function
             predict_next_feature, target_next_feature = rnd_model(rnd_next_obs) # NOTE: removed mb_inds here!
@@ -331,6 +347,8 @@ def main():
             int_reward_rms.update(intrinsic_rewards)
         # Normalize intrinsic rewards and add to extrinsic rewards
         # TODO: potentially normalize by mean as well
+        if norm_by_mean:
+            intrinsic_rewards -= int_reward_rms.mean
         # intrinsic_rewards = (intrinsic_rewards - int_reward_rms.mean) / np.sqrt(int_reward_rms.var + 1e-8)
         intrinsic_rewards /= np.sqrt(int_reward_rms.var + 1e-8)
         intrinsic_rewards = np.clip(intrinsic_rewards, 0, args.rnd_max_intrinsic_reward)
@@ -486,7 +504,9 @@ def main():
             if args.pr_enabled:
                 q_err1 = torch.abs(qf1_a_values - next_q_value).cpu().detach().numpy()
                 q_err2 = torch.abs(qf2_a_values - next_q_value).cpu().detach().numpy()
-                new_priorities = np.minimum(q_err1, q_err2) # use minimum of the two TD errors for priority update
+                q_err = np.minimum(q_err1, q_err2) # use minimum of the two TD errors for priority update
+                int_reward = compute_intrinsic_reward(data["next_observation"], update_obs_rms=False)
+                new_priorities = (1 - args.pr_factor_int_reward) *q_err + args.pr_factor_int_reward * int_reward
                 rb.update_priority(data["index"], new_priorities)
 
             # NOTE: added RND loss here

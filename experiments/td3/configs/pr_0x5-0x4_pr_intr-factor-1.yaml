@@ -1,0 +1,10 @@
+exp_name: pr_0x5-0x4_pr_intr-factor-1
+
+rnd_int_coef: 0 # disable intrinsic rewards, only use for prioritization
+rnd_ext_coef: 1
+is_self_play: true
+
+pr_enabled: true
+pr_alpha: 0.5
+pr_beta: 0.4
+pr_factor_int_reward: 1
