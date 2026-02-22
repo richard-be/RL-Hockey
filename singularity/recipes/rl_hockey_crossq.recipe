@@ -76,7 +76,7 @@ pip install tyro
 pip install imageio
 pip install wandb
 pip install pygame
-pip install gymnasium[classic-control,box2d]==0.29.1
+pip install gymnasium[classic-control,box2d,mujoco]==0.29.1
 pip install tensorboard
 pip install colorednoise
 python3 -m pip install git+https://github.com/martius-lab/hockey-env.git --no-deps
