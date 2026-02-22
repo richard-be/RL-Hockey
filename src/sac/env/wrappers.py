@@ -4,46 +4,36 @@ import gymnasium as gym
 import heapq
 
 class OpponentResetWrapper(gym.Wrapper):
-  def __init__(self, env, opponent_sampler, episode_count):
+  def __init__(self, env, opponent_sampler, episode_count, elo_system):
     super().__init__(env)
     self.opponent_sampler = opponent_sampler
     self.episode_count = episode_count
+    self.current_opponent_id = None
+    self.elo_system = elo_system
 
   def reset(self, **kwargs):
     id, opponent = self.opponent_sampler.sample_opponent(self.episode_count.value)
     self.current_opponent_id = id
     self.env.set_opponent(opponent)
     return self.env.reset(**kwargs)
-  
-class EloWrapper(gym.Wrapper):
-    def __init__(self, env, elo_system):
-        super().__init__(env)
-        self.current_opponent_id = None
-        self.elo_system = elo_system
 
-    def reset(self, **kwargs):
-        # kwargs should include opponent_id
-        self.current_opponent_id = kwargs.get("opponent_id")
-        return self.env.reset(**kwargs)
-
-    def step(self, action):
-        obs, reward, terminated, truncated, info = self.env.step(action)
-        if terminated:
-            opponent_id = self.env.current_opponent_id
-            score = info.get("winner") # in {-1, 0, 1}
-            score = (score + 1) / 2
-            self.elo_system.update_elo("self_0", opponent_id, score)
-        return obs, reward, terminated, truncated, info
+  def step(self, action):
+    obs, reward, terminated, truncated, info = self.env.step(action)
+    if terminated:
+        score = info.get("winner") # in {-1, 0, 1}
+        score = (score + 1) / 2
+        self.elo_system.update_elo("self_0", self.current_opponent_id, score)
+    return obs, reward, terminated, truncated, info
   
 class OpponentSampler():
   """samples opponent, keeps dict of ids and players"""
-  def __init__(self, self_play_len):
+  def __init__(self, self_play_len, elo_system):
     self.opponents = {"easy": h_env.BasicOpponent(), "hard": h_env.BasicOpponent(weak=False)}
     self.self_play_pool = []
     self.custom_opponent_pool = []
     self.self_play_len = self_play_len
     self.deleted_actors = ["easy", "hard", "self_0"]
-    self.elo_dict = dict()
+    self.elo_system = elo_system
 
   def sample_opponent(self, global_episode, beta=0.01):
     probs = self.get_probs(global_episode)
@@ -52,8 +42,10 @@ class OpponentSampler():
       opponent = self.opponents["easy"]
       opponent_id = "easy"
     elif choice == "trained" and len(self.opponents) > 2:
-        agents = list(self.elo_dict.keys())
-        elos = np.array([self.elo_dict[a] for a in agents], dtype=np.float64)
+        elo_dict = self.elo_system.get_elo_dict()
+        elo_dict_filtered = {k: v for k, v in elo_dict.items() if k not in self.deleted_actors}
+        agents = list(elo_dict_filtered.keys())
+        elos = np.array([elo_dict_filtered[a] for a in agents], dtype=np.float64)
         elos = elos - np.max(elos)
         probs = np.exp(beta * elos)
         probs /= probs.sum()
@@ -65,20 +57,14 @@ class OpponentSampler():
     return opponent_id, opponent    
   
   def get_probs(self, global_episode):
-    if global_episode < 25e2:
-      probs = [1, 0, 0]
-    elif global_episode < 1e3:
-      probs = [0.2, 0.8, 0]
+    if global_episode < 7e3:
+      probs = [0, 1, 0]
     else:
       probs = [0, 0.1, 0.9]
     return probs
          
   def add_opponent(self, actor, name):
     self.opponents[name] = actor
-
-  def update_elo_dict(self, elo_dict):
-    self.elo_dict = {k: v for k, v in elo_dict.items() if k not in self.deleted_actors} #delete the active actor (and maybe basic and custom actors, idk yet) 
-    
 
 class EpisodeCounter:
     def __init__(self):

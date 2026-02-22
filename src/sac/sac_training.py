@@ -26,8 +26,7 @@ def make_env(seed, episode_count, device, weak_opponent, self_play, elo_system, 
             env = c_env.HockeyEnv_Custom_BasicOpponent(env_mode, weak_opponent)
         else:
             env = c_env.HockeyEnv_Custom_CustomOpponent(h_env.BasicOpponent(weak=True), device, mode=h_env.Mode[env_mode]) 
-            env = wrappers.OpponentResetWrapper(env, opponent_sampler, episode_count)
-            env = wrappers.EloWrapper(env, elo_system)
+            env = wrappers.OpponentResetWrapper(env, opponent_sampler, episode_count, elo_system)
      
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env.action_space.seed(seed)
@@ -68,7 +67,7 @@ def main():
     
     episode_count = wrappers.EpisodeCounter()
     elo_system = wrappers.EloSystem()
-    opponent_sampler = wrappers.OpponentSampler(args.self_play_len)
+    opponent_sampler = wrappers.OpponentSampler(args.self_play_len, elo_system)
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
@@ -91,7 +90,7 @@ def main():
     #initialization of other actors
     td3_actor = Td3_Actor(envs).to(device)
     td3_actor.load_state_dict(torch.load("models/td3/HockeyOne-v0__rnd_0x5-1_sp_1__42__1771317357.model")[0])
-    opponent_sampler.add_custom_opponent(td3_actor, "custom_td3")
+    opponent_sampler.add_opponent(td3_actor, "custom_td3")
     elo_system.register_player("custom_td3")
 
     # Automatic entropy tuning
@@ -159,7 +158,7 @@ def main():
                 if info is not None:
                     winrate_window.append(int(info["winner"]==1))
 
-                    if episode_count.value % 50 == 0:
+                    if episode_count.value % 500 == 0:
                         sps = int(global_step / (time.time() - start_time))
                         if args.self_play:
                             opponent = envs.envs[env_index].get_opponent_name()
@@ -244,9 +243,6 @@ def main():
                         alpha_loss.backward()
                         a_optimizer.step()
                         alpha = log_alpha.exp().item()
-            if global_step >= args.freeze_start and global_step % args.elo_update_frequency == 0:
-                #todo only start after freezing also starts
-                opponent_sampler.update_self_play_pool(elo_system.get_elo_dict())
 
             if global_step >= args.freeze_start and global_step % args.freeze_freq == 0 and args.self_play:
                 frozen_actor = copy.deepcopy(actor)
@@ -254,7 +250,7 @@ def main():
                 for p in frozen_actor.parameters():
                     p.requires_grad = False
                 frozen_index += 1
-                opponent_sampler.add_self_play_opponent(frozen_actor, frozen_index)
+                opponent_sampler.add_opponent(frozen_actor, f"self_{frozen_index}")
                 elo_system.register_player(f"self_{frozen_index}", elo_system.elo_dict["self_0"])
 
 
