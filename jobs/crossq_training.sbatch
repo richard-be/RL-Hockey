@@ -10,6 +10,7 @@
 #SBATCH --gres=gpu:1
 # how many gpus to use
 # each node has 4 gpus
+#SBATCH --time=23:00:00
 # job length: the job will run either until completion or until this timer runs out
 #SBATCH --error=outputs/crossq/job.%J.err
 # %J is the job ID, errors will be written to this file
@@ -27,5 +28,5 @@ singularity exec \
   --bind $PWD:/workspace \
   $PWD/singularity/images/rl_hockey.simg \
   python3 /workspace/src/crossq/train.py \
-    env.env_id="Hockey-v0"
+    env.env_id="Hockey-v0"  agent_config.actor_lr=0.0003 agent_config.target=False agent_config.soft_l2=False agent_config.q_lr=0.0003 agent_config.weight_norm=True  agent_config.utd=1 agent_config.batch_norm_type="BN" env.play_against_latest_model_ratio=0
 
