@@ -161,7 +161,7 @@ class Actor(nn.Module):
         return action, log_prob, mean
     
     def act(self, obs):
-        x = torch.Tensor(obs)
+        x = torch.from_numpy(obs).float().to(next(self.parameters()).device)
         mean, log_std = self(x)
         std = log_std.exp()
         normal = torch.distributions.Normal(mean, std)
