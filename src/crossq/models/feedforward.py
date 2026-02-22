@@ -19,8 +19,10 @@ class NormalizationConfig:
 @dataclass
 class NNConfig:
     input_dim: int
-    hidden_dim: int
+    
     output_dim: int | list[int]  # if  multiple output layers
+
+    hidden_dim: int = 256
 
     num_hidden_layers: int = 1
     act_func: nn.Module = field(default_factory=nn.ReLU)

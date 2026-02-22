@@ -75,8 +75,10 @@ class OpponentPool:
         if random.random() <= self.play_against_latest_model_ratio:
             return self.current_policy, "current"
         else:
-            ids = [f"fixed_{idx}" for idx in range(self.fixed_agent_buffer_size)] + [f"agent_{idx}" for idx in range(max(self.agent_idx - self.window_size, 0), self.agent_idx)]
-            agent = np.random.choice(ids).item()
+            ids = [f"agent_{idx}" for idx in range(max(self.agent_idx - self.window_size, 0), self.agent_idx)]
+            scores = np.array([self.score_pool[id_] for id_ in ids])
+            scores /= np.sum(scores)
+            agent = np.random.choice(ids, p=score).item()
             return self.opponent_pool[agent], agent
             
 
@@ -84,6 +86,7 @@ class HockeyEnv_AgenticOpponent(h_env.HockeyEnv):
     def __init__(self, opponent: AgenticOpponent, 
                  mode=h_env.Mode.NORMAL):
         super().__init__(mode=mode, keep_mode=True)
+        self.action_space = gym.spaces.Box(-1, +1, (4,), dtype=np.float32)
         self.opponent = opponent
 
     def step(self, action):
@@ -133,7 +136,12 @@ class HockeyEnv_SelfPlay(h_env.HockeyEnv):
             if self.num_steps <= self.warmup_period:
                 self._sample_fixed_opponent()
             else:
-                self._swap_agent()
+                # sample 
+                prct = min(self.num_steps / 500_000, 0.8)
+                if random.random() < prct:
+                    self._swap_agent()
+                else:
+                    self._sample_fixed_opponent()
 
             self._get_info
 
