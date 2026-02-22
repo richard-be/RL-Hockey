@@ -37,9 +37,6 @@ class HockeyEnv_Custom_CustomOpponent(HockeyEnv_Custom):
   def set_opponent(self, opponent):
     self.opponent = opponent
 
-  def get_opponent_name(self):
-    return type(self.opponent).__name__
-
   def step(self, action):
     ob2 = self.obs_agent_two()
     if type(self.opponent).__name__ == "BasicOpponent":

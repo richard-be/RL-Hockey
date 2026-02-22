@@ -123,7 +123,7 @@ def main():
     env_indices = np.arange(args.num_envs)
     episode_steps = np.zeros_like(env_indices)
     frozen_index = 0
-    winrate_window = deque(maxlen=args.winrate_window_size)
+    winrate_window = dict()
 
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
@@ -156,21 +156,25 @@ def main():
         if "final_info" in infos:
             for env_index, info in enumerate(infos["final_info"]):
                 if info is not None:
-                    winrate_window.append(int(info["winner"]==1))
-
+                    if args.self_play:
+                            opponent = envs.envs[env_index].get_opponent_name()
+                    else:
+                        opponent = "weak" if args.weak_opponent else "strong"
+                    if opponent in winrate_window:
+                        winrate_window[opponent].append(int(info["winner"]==1))
+                    else:
+                        winrate_window[opponent] = deque(maxlen=args.winrate_window_size)
+                        winrate_window[opponent].append(int(info["winner"]==1))
                     if episode_count.value % 500 == 0:
                         sps = int(global_step / (time.time() - start_time))
-                        if args.self_play:
-                            opponent = envs.envs[env_index].get_opponent_name()
-                        else:
-                            opponent = "weak" if args.weak_opponent else "strong"
-                        print(f"episode={episode_count.value}, global_step={global_step}, env={env_index}, winrate={sum(winrate_window)/len(winrate_window)}, winner={info['winner']}, SPS={sps}, opponent={opponent}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
+                        print(f"episode={episode_count.value}, global_step={global_step}, env={env_index}, winrate={sum(winrate_window[opponent])/len(winrate_window[opponent])}, winner={info['winner']}, SPS={sps}, opponent={opponent}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
                         print(elo_system.get_elo_dict())
                     if args.track:
                         writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                         writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
                         writer.add_scalar("charts/time_return", info["episode"]["r"], time.time()-start_time)
-                        writer.add_scalar("charts/winrate", sum(winrate_window)/len(winrate_window), global_step)
+                        writer.add_scalar(f"charts/winrate/{opponent}", sum(winrate_window[opponent])/len(winrate_window[opponent]), global_step)
+                
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()

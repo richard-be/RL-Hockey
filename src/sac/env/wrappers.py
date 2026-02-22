@@ -16,6 +16,9 @@ class OpponentResetWrapper(gym.Wrapper):
     self.current_opponent_id = id
     self.env.set_opponent(opponent)
     return self.env.reset(**kwargs)
+  
+  def get_opponent_name(self):
+    return self.current_opponent_id
 
   def step(self, action):
     obs, reward, terminated, truncated, info = self.env.step(action)
