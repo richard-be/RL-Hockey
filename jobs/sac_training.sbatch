@@ -28,4 +28,4 @@ singularity exec \
   --bind $PWD:/workspace \
   $PWD/singularity/images/rl_hockey.simg \
   bash -c "cd /workspace && python3 -m scripts.run_sac_training \
-  --total-timesteps 400000 --num-envs 4 --track --sigma 0.01 --beta 2.0 --no-autotune --alpha 0.0"
+  --total-timesteps 4000000 --num-envs 4 --track --sigma 0.01 --beta 2.0 --no-autotune --alpha 0.0"
