@@ -18,7 +18,7 @@ from tensordict import TensorDict
 # from .algorithm.buffers import ReplayBuffer, PrioritizedReplayBuffer, PrioritizedBatch
 from .env import make_env, make_hockey_env, make_hockey_env_self_play, HockeyPlayer, HockeyEnv
 from .algorithm.evaluation import evaluate, setup_eval_env
-from .algorithm.td3 import Actor, QNetwork
+from .algorithm.models import Actor, QNetwork
 
 # NOTE: ADDED THESE IMPORTS 
 from tqdm import tqdm 
@@ -28,7 +28,9 @@ from dataclasses import asdict
 
 # NOTE: added here, adapted from rnd.py
 from .algorithm.rnd import RNDModel, RunningMeanStd
-from .algorithm.colored_noise import reset_noise
+# from .algorithm.colored_noise import reset_noise
+# from ..sac.env.colored_noise import reset_noise
+from ..sac.run_training import reset_noise
 from gymnasium.wrappers.vector import RecordEpisodeStatistics
 from typing import Tuple, Optional
 
@@ -164,7 +166,7 @@ def main():
         for key, value in config_args.items():
             setattr(args, key, config_args[key])
 
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    run_name = f"{args.env_id}/{args.exp_name}__{args.seed}__{int(time.time())}"
     # NOTE: changed here to account for num_envs
     total_timesteps = args.total_timesteps # int(args.effective_timesteps / args.num_envs)
     learning_starts = args.learning_starts # int(args.effective_learning_starts / args.num_envs)
@@ -223,10 +225,11 @@ def main():
     def unwrap_env(env): 
         if isinstance(env, HockeyEnv): return env 
         else: return unwrap_env(env.env)  
-    unwrapped_envs = [unwrap_env(env) for env in envs.env.envs]
 
-    eval_player, eval_env, eval_env_unwrapped = setup_eval_env(args.hockey_mode, args.seed)
-    eval_env.observation_space.dtype = np.float32
+    if args.is_hockey:
+        unwrapped_envs = [unwrap_env(env) for env in envs.env.envs]
+        eval_player, eval_env, eval_env_unwrapped = setup_eval_env(args.hockey_mode, args.seed)
+        eval_env.observation_space.dtype = np.float32
     # END OF NOTE 
 
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
@@ -244,9 +247,10 @@ def main():
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.learning_rate)
 
     # NOTE: added here: add model to player for self-play
-    if args.is_self_play:
-        player.actor = actor
-    eval_player.actor = actor
+    if args.is_hockey: 
+        if args.is_self_play:
+            player.actor = actor
+        eval_player.actor = actor
 
     # NOTE: added RND model and optimizer here
     # initialize model
@@ -264,9 +268,9 @@ def main():
     # rb_class, rb_kwargs = (ReplayBuffer, {}) if not args.pr_enabled else (PrioritizedReplayBuffer, {"alpha": args.pr_alpha, "beta": args.pr_beta})
 
     if args.pr_enabled:
-        rb = TensorDictPrioritizedReplayBuffer(storage=LazyTensorStorage(args.buffer_size), alpha=args.pr_alpha, beta=args.pr_beta)
+        rb = TensorDictPrioritizedReplayBuffer(storage=LazyTensorStorage(args.buffer_size, device=device), alpha=args.pr_alpha, beta=args.pr_beta)
     else: 
-        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(args.buffer_size))
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(args.buffer_size, device=device))
 
     # rb = rb_class(
     #     args.buffer_size,
@@ -285,7 +289,7 @@ def main():
         torch.save((actor.state_dict(), qf1.state_dict(), qf2.state_dict()), model_path)
         print(f"model saved to {model_path}")
 
-        if n_eval_episodes > 0: 
+        if n_eval_episodes > 0 and args.is_hockey: 
             # NOTE: changed evaluation
             results = evaluate(eval_env, eval_env_unwrapped, n_eval_episodes, actor, is_self_play=args.is_self_play, unwrapped_train_envs=unwrapped_envs, device=device)
             for opponent_name, stats in results.items():
@@ -297,7 +301,7 @@ def main():
     # NOTE: moved RND normalization to separate function: 
     def normalize_obs(obs, eps=1e-8, clamp_range=(-5.0, 5.0)): 
         if type(obs) == np.ndarray:
-            obs = torch.from_numpy(obs).to(device)
+            obs = torch.from_numpy(obs).to(device, dtype=torch.float32)
         return ((obs - torch.tensor(obs_rms.mean, device=device, dtype=torch.float32)) / 
                         torch.sqrt(torch.tensor(obs_rms.var, device=device, dtype=torch.float32) + eps)).clamp(*clamp_range)
     
@@ -334,6 +338,9 @@ def main():
     action_clamp_low = torch.tensor(envs.single_action_space.low, device=device, dtype=torch.float32)
     action_clamp_high = torch.tensor(envs.single_action_space.high, device=device, dtype=torch.float32)
 
+
+    os.makedirs(f"models/td3/{args.env_id}", exist_ok=True)
+    os.makedirs(f"runs/td3/{args.env_id}", exist_ok=True)
 
     for global_step in tqdm(range(total_timesteps), "Training agent"):
         # ALGO LOGIC: put action logic here
@@ -388,7 +395,8 @@ def main():
         real_next_obs = next_obs.copy()
         for idx, trunc in enumerate(truncations):
             if trunc:
-                real_next_obs[idx] = infos["final_observation"][idx]
+                if "final_observation" in infos and idx in infos["final_observation"]:
+                    real_next_obs[idx] = infos["final_observation"][idx]
 
         # NOTE: added intrinsic rewards to replay buffer
         rb_add(rb, obs, real_next_obs, actions, extrinsic_rewards, intrinsic_rewards, terminations, infos)
@@ -535,7 +543,7 @@ def main():
             # NOTE: ADDED HERE
             if (global_step+1) % 1000 == 0: 
                 print("Saving intermediate model")
-                save_and_eval_model(global_step, 1)
+                save_and_eval_model(global_step, 10)
                 if args.is_self_play:
                     writer.add_scalar("self_play/player_elo", player.elo, global_step)
                     opponent_elo = np.mean([env.opponent.elo for env in unwrapped_envs])

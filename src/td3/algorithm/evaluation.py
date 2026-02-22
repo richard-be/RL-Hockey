@@ -1,11 +1,9 @@
 import torch 
 import numpy as np
-from hockey.hockey_env import BasicOpponent, Mode
+from hockey.hockey_env import Mode
 from time import sleep
 import random
 from ..env import HockeyPlayer, make_hockey_eval_env, OpponentActor, load_actor
-from .td3 import Actor
-import gymnasium as gym
 from tqdm import tqdm
 
 def _evaluate_opponent_pool(
@@ -131,9 +129,10 @@ def evaluate(
                 if r not in current_results:
                     current_results[r] = []
                 current_results[r].append(value)
-    for i, _ in enumerate(unwrapped_train_envs): 
-        results.pop(f"current_{i}")
-    results["current"] = {r: np.mean(values) for r, values in current_results.items()}
+    if unwrapped_train_envs is not None:
+        for i, _ in enumerate(unwrapped_train_envs): 
+            results.pop(f"current_{i}")
+        results["current"] = {r: np.mean(values) for r, values in current_results.items()}
     return results
 
 def run_evaluation(player_path, n_episodes=10, render=True, seed=42, hockey_mode=Mode.NORMAL, use_default_opponents=True, custom_opponents=None, device = "cpu"):
