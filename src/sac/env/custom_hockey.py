@@ -46,8 +46,7 @@ class HockeyEnv_Custom_CustomOpponent(HockeyEnv_Custom):
       a2 = self.opponent.act(ob2)
     else:
       with torch.no_grad():
-        a2, _, _ = self.opponent.act(torch.Tensor(ob2).unsqueeze(0).to(self.device))
-        a2 = a2.detach().cpu().numpy().squeeze()
+        a2 = self.opponent.act(np.array(ob2))
 
     action2 = np.hstack([action, a2])
     return super().step(action2)

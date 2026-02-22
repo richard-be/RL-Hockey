@@ -89,10 +89,10 @@ def main():
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
 
     #initialization of other actors
-    """td3_actor = Td3_Actor(envs).to(device)
+    td3_actor = Td3_Actor(envs).to(device)
     td3_actor.load_state_dict(torch.load("models/td3/HockeyOne-v0__rnd_0x5-1_sp_1__42__1771317357.model")[0])
-    opponent_sampler.add_custom_opponent(td3_actor, "td3")
-    elo_system.register_player("td3")"""
+    opponent_sampler.add_custom_opponent(td3_actor, "custom_td3")
+    elo_system.register_player("custom_td3")
 
     # Automatic entropy tuning
     if args.autotune:

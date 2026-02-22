@@ -62,12 +62,12 @@ class OpponentSampler():
     return opponent_id, opponent    
   
   def get_probs(self, global_episode):
-    if global_episode < 3e3:
+    if global_episode < 25e2:
       probs = [1, 0, 0, 0]
     elif global_episode < 6e3:
-      probs = [0.5, 0.4, 0, 0.1]
+      probs = [0.2, 0.8, 0, 0]
     else:
-      probs = [0.1, 0.2, 0, 0.7]
+      probs = [0.1, 0.2, 0.3, 0.4]
     return probs
          
   def add_self_play_opponent(self, frozen_actor, frozen_index):
@@ -78,8 +78,8 @@ class OpponentSampler():
     self.self_play_pool = heapq.nlargest(self.self_play_len, elo_dict_selected)
 
   def add_custom_opponent(self, opponent, name):
-     self.opponents[f"custom_{name}"] = opponent
-     self.custom_opponent_pool.append(f"custom_{name}")
+     self.opponents[name] = opponent
+     self.custom_opponent_pool.append(name)
 
 class EpisodeCounter:
     def __init__(self):
