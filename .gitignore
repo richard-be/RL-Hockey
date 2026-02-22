@@ -2,6 +2,12 @@
 __pycache__/
 outputs/
 singularity/images/
+runs/
+src/crossq/models/crossq/
+runs/crossq
+.DS_Store
+models/crossq
+src/crossq/videos
 .DS_Store
 test
 .vscode
