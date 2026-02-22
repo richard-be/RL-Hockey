@@ -138,7 +138,7 @@ class HockeyEnv_CustomPlayers(HockeyEnv_BasicOpponent):
 
             if self.player.elo > self.last_player_elo_when_adding_opponent + self.diff_elo_to_add_opponent: 
                 # if player has improved significantly since last opponent was added, add new opponent to pool
-                self.add_actor_to_opponent_pool(self.player.actor.clone(), self.player.elo)
+                self.add_actor_to_opponent_pool(self.player.actor.clone(), self.player.player_name, self.player.elo)
                 self.last_player_elo_when_adding_opponent = self.player.elo
 
         return obs, reward, term, trunc, info
@@ -153,8 +153,8 @@ class HockeyEnv_CustomPlayers(HockeyEnv_BasicOpponent):
         return np.random.choice(self.opponent_pool, p=selection_probabilities)
     
 
-    def add_actor_to_opponent_pool(self, actor, elo=1200):
-        self.opponent_pool.append(HockeyPlayer(actor, player_num=len(self.opponent_pool), elo=elo, player_name="Self"))
+    def add_actor_to_opponent_pool(self, actor, player_name, elo=1200):
+        self.opponent_pool.append(HockeyPlayer(actor, player_num=len(self.opponent_pool), elo=elo, player_name=player_name))
 
 class OpponentActor(): 
     """A wrapper to use BasicOpponent as an actor for self-play training"""
@@ -242,3 +242,9 @@ def load_actor(run_name: str, env, device="cpu"):
     add_act_method(actor)
 
     return actor.to(device)
+
+def disable_gradients(actor):
+    actor.eval()
+    for p in actor.parameters():
+        p.requires_grad = False
+    return actor

@@ -116,7 +116,10 @@ def evaluate(
 
     if custom_opponents is not None:
         for name, opponent in custom_opponents:
-            opponent = load_actor(opponent, env, device)
+            if isinstance(opponent, str):
+                opponent = load_actor(opponent, env, device=device)
+            # otherwise assume it's already an actor
+            opponent.eval()
             eval_opponents.append((name, HockeyPlayer(opponent, player_num=len(eval_opponents), player_name=name)))
 
     results = _evaluate_opponent_pool(env, unwrapped_env, n_eval_episodes, actor, eval_opponents, render)
