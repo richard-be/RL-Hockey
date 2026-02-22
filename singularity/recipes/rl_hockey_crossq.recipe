@@ -81,6 +81,10 @@ pip install tensorboard
 pip install colorednoise
 python3 -m pip install git+https://github.com/martius-lab/hockey-env.git --no-deps
 
+<<<<<<< HEAD
+
+=======
+>>>>>>> 13e19b4c6a890bd2240a18ead4a304e1dd7ec9f9
 echo '------------------------------------------------------------------'
 echo 'Versions of installed tools:'
 echo 'Python:'

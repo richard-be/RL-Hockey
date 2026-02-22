@@ -1,10 +1,18 @@
 import torch
 import math
+<<<<<<< HEAD
+from crossq.models.feedforward import FeedForward, NNConfig
+
+
+@torch.no_grad()
+def project_weight_to_norm_ball(module: torch.nn.Linear, scale: float | None  = 1.0):
+=======
 from models.feedforward import FeedForward, NNConfig
 
 
 @torch.no_grad()
 def project_weight_to_norm_ball(module: torch.nn.Linear, scale: float | None  = None):
+>>>>>>> 13e19b4c6a890bd2240a18ead4a304e1dd7ec9f9
     weight, bias = module.weight, module.bias
     if not scale:
         scale = math.sqrt(module.weight.shape[0] * 2)  # expected norm under He initialization
