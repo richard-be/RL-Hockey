@@ -3,8 +3,8 @@ import numpy as np
 
 from crossq.models.actor import GaussianPolicyConfig, GaussianPolicy
 from crossq.models.critic import QNetwork as CrossQCritic
-from td3.algorithm.td3 import Actor as TD3Actor
-from td3.algorithm.td3 import QNetwork as TD3Critic
+from td3.algorithm.models import Actor as TD3Actor
+from td3.algorithm.models import QNetwork as TD3Critic
 from sac.agent.sac import Actor as SACActor
 from sac.agent.sac import SoftQNetwork as SACCritic
 
@@ -19,21 +19,21 @@ def crossq_constructor(env) -> GaussianPolicy:
     return actor
 
 
-def sac_constructor(env) -> SACActor:
-    actor = SACActor(env)
-    actor.eval()
-    actor._act = actor.act
-    def act_(obs):
-        with torch.no_grad():
-            actor.eval()
-            action, _, _ = actor._act(torch.from_numpy(obs).to(torch.float32).unsqueeze(0))
-            actor.train()
-            return action.squeeze(0).detach().cpu().numpy()
-    actor.act = act_
-    return actor
+# def sac_constructor(env) -> SACActor:
+#     actor = SACActor(env)
+#     actor.eval()
+#     actor._act = actor.act
+#     def act_(obs):
+#         with torch.no_grad():
+#             actor.eval()
+#             action, _, _ = actor._act(torch.from_numpy(obs).to(torch.float32).unsqueeze(0))
+#             actor.train()
+#             return action.squeeze(0).detach().cpu().numpy()
+#     actor.act = act_
+#     return actor
 
 ACTOR_CONSTRUCTORS = {
-    "sac": sac_constructor,
+    "sac": SACActor,
     "td3": TD3Actor,
     "crq": crossq_constructor, 
 }
