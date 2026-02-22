@@ -26,6 +26,6 @@
 singularity exec \
   --nv \
   --bind $PWD:/workspace \
-  $PWD/singularity/images/rl_hockey_client.simg \
-  basch ./autorestart.sh
+  $PWD/singularity/images/client.simg \
+  bash /workspace/src/client/autorestart.sh --token "adfbb097-e40d-4057-a4fe-8bddf3328677" --args --agent="crq" --model="/workspace/src/models/crossq/CrossQ-selfplay-Hockey-v0-42-1771773335-0.0003-1000000-False-BN/700000/model.pkl=" 
 

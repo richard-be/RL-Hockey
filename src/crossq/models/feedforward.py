@@ -3,7 +3,7 @@ from torch import nn
 from dataclasses import dataclass, field
 from copy import deepcopy
 
-from models.batchrenorm import BatchRenorm1d
+from crossq.models.batchrenorm import BatchRenorm1d
 
 from collections import OrderedDict
 
@@ -19,17 +19,11 @@ class NormalizationConfig:
 @dataclass
 class NNConfig:
     input_dim: int
-<<<<<<< HEAD
     
     output_dim: int | list[int]  # if  multiple output layers
 
     hidden_dim: int = 256
 
-=======
-    hidden_dim: int
-    output_dim: int | list[int]  # if  multiple output layers
-
->>>>>>> 13e19b4c6a890bd2240a18ead4a304e1dd7ec9f9
     num_hidden_layers: int = 1
     act_func: nn.Module = field(default_factory=nn.ReLU)
 

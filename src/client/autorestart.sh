@@ -31,7 +31,7 @@ termination_times=()
 
 while true; do
     # Run the command foobar
-    python3 ./run_client.py "$@"
+    python3 ./src/client/run_client.py "$@"
 
     # Get the current timestamp
     current_time=$(date +%s)

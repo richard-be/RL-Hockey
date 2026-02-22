@@ -85,8 +85,7 @@ pip install gymnasium[classic-control,box2d]==0.29.1
 pip install tensorboard
 pip install colorednoise
 python3 -m pip install git+https://github.com/martius-lab/hockey-env.git --no-deps
-pip install git+https://github.com/martius-lab/teamproject-competition-server.git#egg=comprl&subdirectory=comprl
-
+pip install "comprl @ git+https://github.com/martius-lab/teamproject-competition-server.git#egg=comprl&subdirectory=comprl"
 
 echo '------------------------------------------------------------------'
 echo 'Versions of installed tools:'

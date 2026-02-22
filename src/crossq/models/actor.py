@@ -1,12 +1,9 @@
-from models.feedforward import FeedForward, NNConfig
+from crossq.models.feedforward import FeedForward, NNConfig
 import math
 
 import torch
 from torch import nn
-<<<<<<< HEAD
 import numpy as np
-=======
->>>>>>> 13e19b4c6a890bd2240a18ead4a304e1dd7ec9f9
 from torch import distributions
 
 from dataclasses import dataclass, field
@@ -22,22 +19,6 @@ class GaussianPolicyConfig(NNConfig):
     def __post_init__(self):
         self.output_dim = [self.action_dim, self.action_dim]
 
-
-<<<<<<< HEAD
-=======
-@torch.no_grad()
-def project_weight_to_norm_ball(module: torch.nn.Linear, scale: float | None = 1):
-    weight, bias = module.weight, module.bias
-    if not scale:
-        scale = math.sqrt(module.weight.shape[0] / 3)  # expected norm under pytorch's initialization U(- 1/ sqrt(fan_in), 1 / sqrt(fan_in))
-    vec = torch.concat([weight.view(-1), bias.view(-1)])
-    n = vec.norm(p=2)
-
-    if scale < n:
-        module.weight.mul_(scale / (n + 1e-12))  # epsilon to avoid division by zero
-        module.bias.mul_(scale / (n + 1e-12))
-
->>>>>>> 13e19b4c6a890bd2240a18ead4a304e1dd7ec9f9
 
 class GaussianPolicy(FeedForward):
 
@@ -84,19 +65,9 @@ class GaussianPolicy(FeedForward):
                                                     # returns dimension-wise factored probabilities 
         return actions, log_prob, optimal_action
 
-<<<<<<< HEAD
     def act(self, observations: np.array) -> np.array:
         with torch.no_grad():
             self.eval()
             action, _, _ = self.get_action(torch.from_numpy(observations).to(torch.float32).unsqueeze(0))
             self.train()
             return action.squeeze(0).detach().cpu().numpy()
-=======
-    def normalize_weights_(self) -> None:
-        for name, module in self.named_modules():
-            # only normalize non-finale dense layer's weights
-            if "dense" in name:
-                project_weight_to_norm_ball(module)
-
-
->>>>>>> 13e19b4c6a890bd2240a18ead4a304e1dd7ec9f9
