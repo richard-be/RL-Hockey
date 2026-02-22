@@ -134,7 +134,7 @@ def main():
         if global_step < args.learning_starts:
             actions = np.array([envs.single_action_space.sample() for _ in range(envs.num_envs)])
         else:
-            actions, _, _ = actor.act(torch.Tensor(obs).to(device))
+            actions, _, _ = actor.get_action(torch.Tensor(obs).to(device))
             actions = actions.detach().cpu().numpy()
             actions = actions + args.sigma * noise[env_indices, :, episode_steps]
             actions = np.clip(actions, -1.0, 1.0)
@@ -189,7 +189,7 @@ def main():
             for g in range(args.update_ratio):
                 data = rb.sample(args.batch_size)
                 with torch.no_grad():
-                    next_state_actions, next_state_log_pi, _ = actor.act(data.next_observations)
+                    next_state_actions, next_state_log_pi, _ = actor.get_action(data.next_observations)
                     q_targets_sample = random.sample(q_targets, k=args.num_min_q)
                     q_next_targets = torch.stack([q(data.next_observations, next_state_actions) for q in q_targets_sample], dim=0)
                     min_qf_next_target = torch.min(q_next_targets, dim=0)[0] - alpha * next_state_log_pi
@@ -227,7 +227,7 @@ def main():
                         writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
             if global_step % args.policy_frequency == 0:  # TD 3 Delayed update support
                 for _ in range(args.policy_frequency):  # compensate for the delay by doing 'actor_update_interval' instead of 1
-                    pi, log_pi, _ = actor.act(data.observations)
+                    pi, log_pi, _ = actor.get_action(data.observations)
                     q_pi = torch.stack([q(data.observations, pi) for q in q_networks], dim=0)
                     actor_loss = ((alpha * log_pi) - torch.mean(q_pi, dim=0)).mean()
 
@@ -237,7 +237,7 @@ def main():
 
                     if args.autotune:
                         with torch.no_grad():
-                            _, log_pi, _ = actor.act(data.observations)
+                            _, log_pi, _ = actor.get_action(data.observations)
                         alpha_loss = (-log_alpha.exp() * (log_pi + target_entropy)).mean()
 
                         a_optimizer.zero_grad()
