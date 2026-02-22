@@ -30,11 +30,13 @@ from dataclasses import asdict
 from .algorithm.rnd import RNDModel, RunningMeanStd
 # from .algorithm.colored_noise import reset_noise
 # from ..sac.env.colored_noise import reset_noise
-from ..sac.run_training import reset_noise
+from ..sac.sac_training import reset_noise
 from gymnasium.wrappers.vector import RecordEpisodeStatistics
 from typing import Tuple, Optional
-
+from .env import load_actor, disable_gradients
 import yaml
+
+
 
 @dataclass
 class Args:
@@ -98,6 +100,7 @@ class Args:
     weak_opponent: bool = False 
     is_self_play: bool = True
     self_play_initial_opponents: tuple = (("weak", 1200), ("strong", 1500)) # can disable strong opponent in self-play mode to only use it as validation opponent
+    self_play_additional_opponents: Optional[tuple] = None # list of ("<name>:<algorithm>:<path>", opponent_elo) to add to opponent pool 
     self_play_reuse_opponent_exp: bool = False # add opponent's transition experience to replay buffer to increase sample efficiency of self-play training
 
     # colored noise parameters
@@ -206,7 +209,7 @@ def main():
     # env setup
     # NOTE: changed env setup to support self-play
     if args.is_self_play:
-        player = HockeyPlayer(None, player_num=-1) # add actor after creating envs (depends on envs for obs/action space)
+        player = HockeyPlayer(None, player_num=-1, player_name="Self") # add actor after creating envs (depends on envs for obs/action space)
 
     print("initial opponents:", args.self_play_initial_opponents)
     def make_env_fn(idx, is_hockey=args.is_hockey, is_self_play=args.is_self_play): 
@@ -246,10 +249,21 @@ def main():
     q_optimizer = optim.Adam(list(qf1.parameters()) + list(qf2.parameters()), lr=args.learning_rate)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.learning_rate)
 
+    eval_custom_opponents = []
     # NOTE: added here: add model to player for self-play
     if args.is_hockey: 
         if args.is_self_play:
             player.actor = actor
+            # add other inital opponents that can be loaded now that the envs are initialized 
+            for opponent_id, opponent_elo in args.self_play_additional_opponents or []:
+                opponent_name, opponent_path = opponent_id.split(":", 1)
+                opponent_actor = disable_gradients(load_actor(opponent_path, envs, device=device))
+
+                for env in unwrapped_envs: 
+                    env.add_actor_to_opponent_pool(opponent_actor, opponent_name, opponent_elo)
+                # also evaluate against these opponents
+                eval_custom_opponents.append((opponent_name, opponent_actor))
+                print("Added opponent to train pool:", opponent_name, opponent_elo)
         eval_player.actor = actor
 
     # NOTE: added RND model and optimizer here
@@ -291,7 +305,7 @@ def main():
 
         if n_eval_episodes > 0 and args.is_hockey: 
             # NOTE: changed evaluation
-            results = evaluate(eval_env, eval_env_unwrapped, n_eval_episodes, actor, is_self_play=args.is_self_play, unwrapped_train_envs=unwrapped_envs, device=device)
+            results = evaluate(eval_env, eval_env_unwrapped, n_eval_episodes, actor, is_self_play=args.is_self_play, unwrapped_train_envs=unwrapped_envs, device=device, custom_opponents=eval_custom_opponents)
             for opponent_name, stats in results.items():
                 writer.add_scalar(f"eval/{opponent_name}/acum_reward", stats["reward"], current_step)
                 writer.add_scalar(f"eval/{opponent_name}/lose_rate", stats["lose_rate"], current_step) 
