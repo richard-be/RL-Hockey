@@ -4,7 +4,7 @@ from gymnasium import spaces
 import numpy as np  
 from typing import List
 import torch 
-from .algorithm.td3 import Actor
+from .algorithm.models import Actor
 import pygame
 
 # NOTE: original env creation function 
@@ -16,7 +16,7 @@ def make_env(env_id, seed, idx, capture_video, run_name):
             env.enabled = False
         else:
             env = gym.make(env_id)
-        env = gym.wrappers.RecordEpisodeStatistics(env)
+        env = gym.wrappers.RecordEpisodeStatistics(env, stats_key="episode_stats")
         env.action_space.seed(seed)
         return env
     return thunk
@@ -195,7 +195,7 @@ def make_hockey_eval_env(seed, idx=0, mode=Mode.NORMAL):
     return thunk
 
 def load_actor(run_name: str, env, device="cpu"):
-    from .algorithm.td3 import Actor as TD3Actor
+    from .algorithm.models import Actor as TD3Actor
     from ..sac.agent.sac import Actor as SACActor
 
     def add_act_method(actor):

@@ -1,0 +1,12 @@
+exp_name: "rnd_0x5-1"
+
+env_id: "HalfCheetah-v5"
+is_hockey: false
+
+is_self_play: false
+rnd_int_coef: 0.5
+rnd_ext_coef: 1
+
+total_timesteps: 1_000_000
+learning_starts: 10_000
+env_max_episode_steps: 1001
