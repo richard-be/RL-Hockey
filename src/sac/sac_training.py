@@ -255,7 +255,7 @@ def main():
                     p.requires_grad = False
                 frozen_index += 1
                 opponent_sampler.add_self_play_opponent(frozen_actor, frozen_index)
-                elo_system.register_player(f"self_{frozen_index}")
+                elo_system.register_player(f"self_{frozen_index}", elo_system.elo_dict["self_0"])
 
 
     ##todo regelmäßig elo dict updaten und frozen actor zur elo und zur self_play_queue hinzufügen

@@ -43,18 +43,21 @@ class OpponentSampler():
     self.custom_opponent_pool = []
     self.self_play_len = self_play_len
     self.deleted_actors = ["easy", "hard", "self_0"]
+    self.elo_dict = dict()
 
-  def sample_opponent(self, global_episode):
+  def sample_opponent(self, global_episode, beta=0.01):
     probs = self.get_probs(global_episode)
-    choice = np.random.choice(["easy", "hard", "custom", "self"], p=probs)
+    choice = np.random.choice(["easy", "hard", "trained"], p=probs)
     if choice == "easy":
       opponent = self.opponents["easy"]
       opponent_id = "easy"
-    elif choice == "custom" and len(self.custom_opponent_pool) > 0:
-        opponent_id = np.random.choice(self.custom_opponent_pool)
-        opponent = self.opponents[opponent_id]
-    elif choice == "self" and len(self.self_play_pool) > 0:
-        opponent_id = np.random.choice(self.self_play_pool)
+    elif choice == "trained" and len(self.opponents) > 2:
+        agents = list(self.elo_dict.keys())
+        elos = np.array([self.elo_dict[a] for a in agents], dtype=np.float64)
+        elos = elos - np.max(elos)
+        probs = np.exp(beta * elos)
+        probs /= probs.sum()
+        opponent_id = np.random.choice(agents, p=probs)
         opponent = self.opponents[opponent_id]
     else:
       opponent = self.opponents["hard"] #if custom or self dont exist, just use more hard basic enemies
@@ -63,23 +66,19 @@ class OpponentSampler():
   
   def get_probs(self, global_episode):
     if global_episode < 25e2:
-      probs = [1, 0, 0, 0]
-    elif global_episode < 6e3:
-      probs = [0.2, 0.8, 0, 0]
+      probs = [1, 0, 0]
+    elif global_episode < 1e3:
+      probs = [0.2, 0.8, 0]
     else:
-      probs = [0.1, 0.2, 0.3, 0.4]
+      probs = [0, 0.1, 0.9]
     return probs
          
-  def add_self_play_opponent(self, frozen_actor, frozen_index):
-    self.opponents[f"self_{frozen_index}"] = frozen_actor
+  def add_opponent(self, actor, name):
+    self.opponents[name] = actor
 
-  def update_self_play_pool(self, elo_dict):
-    elo_dict_selected = {k: v for k, v in elo_dict.items() if k not in self.deleted_actors} #delete the active actor (and maybe basic and custom actors, idk yet) 
-    self.self_play_pool = heapq.nlargest(self.self_play_len, elo_dict_selected)
-
-  def add_custom_opponent(self, opponent, name):
-     self.opponents[name] = opponent
-     self.custom_opponent_pool.append(name)
+  def update_elo_dict(self, elo_dict):
+    self.elo_dict = {k: v for k, v in elo_dict.items() if k not in self.deleted_actors} #delete the active actor (and maybe basic and custom actors, idk yet) 
+    
 
 class EpisodeCounter:
     def __init__(self):
