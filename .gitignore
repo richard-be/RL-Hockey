@@ -5,8 +5,6 @@ singularity/images/
 .DS_Store
 test
 .vscode
-models
-runs 
 wandb
 videos
 old_runs
@@ -14,3 +12,5 @@ data
 runs_backup
 logs
 data_backup
+runs
+models

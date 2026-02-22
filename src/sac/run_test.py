@@ -99,8 +99,7 @@ if __name__ == "__main__":
     wins = 0
     while episode_count < args.num_games:
         # ALGO LOGIC: put action logic here
-        actions, _, _ = actor.act(torch.Tensor(obs).to(device))
-        actions = actions.detach().cpu().numpy()
+        actions = actor.act(obs)
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
 

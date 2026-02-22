@@ -73,9 +73,9 @@ class Args:
     """colored noise exponent"""
     sigma: float = 0.1
     """colored noise scaling"""
-    freeze_start: float = 1e6
+    freeze_start: float = 1e5
     """when to start freezing actors for self play"""
-    freeze_freq: float = 1e6
+    freeze_freq: float = 1e5
     """number of steps until actor gets frozen for self play"""
     num_q: int = 2
     """number of q networks in ensemble"""
@@ -146,7 +146,7 @@ class Actor(nn.Module):
 
         return mean, log_std
 
-    def act(self, x):
+    def get_action(self, x):
         mean, log_std = self(x)
         std = log_std.exp()
         normal = torch.distributions.Normal(mean, std)
@@ -159,5 +159,16 @@ class Actor(nn.Module):
         log_prob = log_prob.sum(1, keepdim=True)
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
         return action, log_prob, mean
+    
+    def act(self, obs):
+        x = torch.from_numpy(obs).float().to(next(self.parameters()).device)
+        mean, log_std = self(x)
+        std = log_std.exp()
+        normal = torch.distributions.Normal(mean, std)
+        x_t = normal.rsample()  # for reparameterization trick (mean + std * N(0,1))
+        y_t = torch.tanh(x_t)
+        action = y_t * self.action_scale + self.action_bias
+        action_np = action.detach().cpu().numpy()
+        return action_np
 
 
