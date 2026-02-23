@@ -18,7 +18,7 @@ import hockey.hockey_env as h_env
 from src.sac.env.colored_noise import generate_colored_noise
 import copy
 from collections import deque
-from src.td3.algorithm.td3 import Actor as Td3_Actor
+from src.td3.algorithm.models import Actor as Td3_Actor
 
 def make_env(seed, episode_count, device, weak_opponent, self_play, elo_system, env_mode="NORMAL", opponent_sampler=None):
     def thunk():
@@ -257,8 +257,10 @@ def main():
                 opponent_sampler.add_opponent(frozen_actor, f"self_{frozen_index}")
                 elo_system.register_player(f"self_{frozen_index}", elo_system.elo_dict["self_0"])
 
+        if args.track and global_step % args.save_freq == 0 and global_step > 0:
+            torch.save(actor.state_dict(), f"models/sac/{run_name}_{global_step}.pkl")
+            torch.save(q_networks[0].state_dict(), f"models/sac/{run_name}_{global_step}_q.pkl")
 
-    ##todo regelmäßig elo dict updaten und frozen actor zur elo und zur self_play_queue hinzufügen
     envs.close()
     if args.track:
         writer.close()

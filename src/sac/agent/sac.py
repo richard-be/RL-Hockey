@@ -27,6 +27,8 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
     no_save: bool=False
     """whether to save the current run and actor"""
+    save_freq: int = 500000
+    """after how many global steps we save actor"""
 
     # Env specific arguments
     env_mode: str = "NORMAL"
