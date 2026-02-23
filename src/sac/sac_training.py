@@ -160,11 +160,12 @@ def main():
                             opponent = envs.envs[env_index].get_opponent_name()
                     else:
                         opponent = "weak" if args.weak_opponent else "strong"
-                    if opponent in winrate_window:
-                        winrate_window[opponent].append(int(info["winner"]==1))
-                    else:
-                        winrate_window[opponent] = deque(maxlen=args.winrate_window_size)
-                        winrate_window[opponent].append(int(info["winner"]==1))
+                    if info["winner"] in [-1, 1]:
+                        if opponent in winrate_window:
+                            winrate_window[opponent].append(int(info["winner"]==1))
+                        else:
+                            winrate_window[opponent] = deque(maxlen=args.winrate_window_size)
+                            winrate_window[opponent].append(int(info["winner"]==1))
                     if episode_count.value % 500 == 0:
                         sps = int(global_step / (time.time() - start_time))
                         print(f"episode={episode_count.value}, global_step={global_step}, env={env_index}, winrate={sum(winrate_window[opponent])/len(winrate_window[opponent])}, winner={info['winner']}, SPS={sps}, opponent={opponent}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
