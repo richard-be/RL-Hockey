@@ -1,0 +1,5 @@
+exp_name: rnd_2-1_sp_1
+
+rnd_int_coef: 2
+rnd_ext_coef: 1
+is_self_play: true
