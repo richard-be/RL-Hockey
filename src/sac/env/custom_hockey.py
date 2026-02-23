@@ -37,17 +37,13 @@ class HockeyEnv_Custom_CustomOpponent(HockeyEnv_Custom):
   def set_opponent(self, opponent):
     self.opponent = opponent
 
-  def get_opponent_name(self):
-    return type(self.opponent).__name__
-
   def step(self, action):
     ob2 = self.obs_agent_two()
     if type(self.opponent).__name__ == "BasicOpponent":
       a2 = self.opponent.act(ob2)
     else:
       with torch.no_grad():
-        a2, _, _ = self.opponent.act(torch.Tensor(ob2).unsqueeze(0).to(self.device))
-        a2 = a2.detach().cpu().numpy().squeeze()
+        a2 = self.opponent.act(np.array(ob2))
 
     action2 = np.hstack([action, a2])
     return super().step(action2)
