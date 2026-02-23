@@ -78,6 +78,7 @@ def main():
     max_action = float(envs.single_action_space.high[0])
 
     actor = Actor(envs).to(device)
+    actor.load_state_dict(torch.load("models/sac/sac_2_1_1000000_1771781495.pkl"))
     q_networks = [SoftQNetwork(envs).to(device) for _ in range(args.num_q)]
     q_targets = [SoftQNetwork(envs).to(device) for _ in range(args.num_q)]
     params = []
@@ -124,6 +125,7 @@ def main():
     episode_steps = np.zeros_like(env_indices)
     frozen_index = 0
     winrate_window = dict()
+    reward_window = deque(maxlen=args.winrate_window_size)
 
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
@@ -156,6 +158,7 @@ def main():
         if "final_info" in infos:
             for env_index, info in enumerate(infos["final_info"]):
                 if info is not None:
+                    reward_window.append(info['episode']['r'])
                     if args.self_play:
                             opponent = envs.envs[env_index].get_opponent_name()
                     else:
@@ -249,7 +252,7 @@ def main():
                         a_optimizer.step()
                         alpha = log_alpha.exp().item()
 
-            if global_step >= args.freeze_start and global_step % args.freeze_freq == 0 and args.self_play:
+            if global_step >= args.freeze_start and global_step-last_freeze > args.freeze_freq and sum(reward_window)/len(reward_window) > 5 and args.self_play:
                 frozen_actor = copy.deepcopy(actor)
                 frozen_actor.eval()
                 for p in frozen_actor.parameters():
@@ -257,6 +260,8 @@ def main():
                 frozen_index += 1
                 opponent_sampler.add_opponent(frozen_actor, f"self_{frozen_index}")
                 elo_system.register_player(f"self_{frozen_index}", elo_system.elo_dict["self_0"])
+                last_freeze = global_step
+                print("freeze", global_step)
 
         if args.track and global_step % args.save_freq == 0 and global_step > 0:
             torch.save(actor.state_dict(), f"models/sac/{run_name}_{global_step}.pkl")
