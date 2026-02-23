@@ -3,7 +3,7 @@
 # give it any name you want
 #SBATCH --cpus-per-task=4
 # max 24 per node
-#SBATCH --partition=week
+#SBATCH --partition=day
 # choose out of day, week, month depending on job duration
 #SBATCH --mem-per-cpu=3G
 # max 251GB per node
