@@ -48,7 +48,7 @@ def reset_noise(i, noise, beta, samples, action_shape):
 
 def main():
     args = tyro.cli(Args)
-    run_name = f"{args.exp_name}_{args.num_q}_{args.update_ratio}_{args.total_timesteps}_{int(time.time())}"
+    run_name = f"{args.exp_name}_{args.alpha}_{args.autotune}_{args.total_timesteps}_{int(time.time())}"
 
     if args.track:
         writer = SummaryWriter(f"runs/sac/{run_name}")

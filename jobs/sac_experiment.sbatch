@@ -24,26 +24,25 @@
 # here will be your commands for running the script
 
 
-alphas=(0.0)
+alphas=(0.0, 0.1, 0.2, 0.3)
 betas=(2)
-sigmas=(0.01)
-update_ratios=(10)
-num_q_values=(5 10)
+sigmas=(0.0)
+update_ratios=(1)
+num_q_values=(2)
 combinations=()
-#for b in "${betas[@]}"; do
-#    for a in "${alphas[@]}"; do
-#        for sigma in "${sigmas[@]}"; do
-#            for num_q in "${num_q_values[@]}"; do
-#                for update_ratio in "${update_ratios[@]}"; do
-#                    combinations+=("$b $a false $sigma $num_q $update_ratio 200000")
-#                done
-#            done
-#        done
-#    done
-#done
+for b in "${betas[@]}"; do
+    for a in "${alphas[@]}"; do
+        for sigma in "${sigmas[@]}"; do
+            for num_q in "${num_q_values[@]}"; do
+                for update_ratio in "${update_ratios[@]}"; do
+                    combinations+=("$b $a false $sigma $num_q $update_ratio 200000 4")
+                done
+            done
+        done
+    done
+done
 
-combinations+=("2 0.0 false 0.01 2 1 200000 4")
-combinations+=("2 0.0 false 0.01 2 1 200000 10")
+combinations+=("2 0.0 True 0.0 2 1 200000 4")
 i=0
 gpu_ids=(0 1 2 3)
 max_concurrent=4
