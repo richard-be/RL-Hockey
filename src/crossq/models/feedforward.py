@@ -3,7 +3,7 @@ from torch import nn
 from dataclasses import dataclass, field
 from copy import deepcopy
 
-from crossq.models.batchrenorm import BatchRenorm1d
+from models.batchrenorm import BatchRenorm1d
 
 from collections import OrderedDict
 
