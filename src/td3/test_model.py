@@ -1,24 +1,15 @@
 import tyro 
-import json 
-from .env import make_hockey_env, make_hockey_env_self_play, HockeyPlayer, make_hockey_eval_env
-from hockey.hockey_env import HockeyEnv_BasicOpponent, BasicOpponent
-
 from dataclasses import dataclass
-import gymnasium as gym
-import numpy as np
-import torch
 from typing import Optional
 from hockey.hockey_env import Mode 
-from .algorithm.td3 import Actor
-import time 
-from .algorithm.evaluation import run_evaluation
 
+from .algorithm.evaluation import run_evaluation
 
 @dataclass
 class Args:
     env_id: str = "HockeyOne-v0"
     player_path: Optional[str] = None
-    exp_name: Optional[str] = None
+    expname: Optional[str] = None
     """the name of this experiment"""
     seed: int = 42
     """seed of the experiment"""
@@ -54,7 +45,7 @@ def main():
     player_path = args.player_path
 
     if not player_path: 
-        player_path = f"{args.env_id}__{args.exp_name}__{args.seed}__"
+        player_path = f"{args.env_id}/{args.expname}__{args.seed}__"
         if args.time == "latest": 
             args.time = str(find_latest_time(player_path+"*"))
         player_path += args.time

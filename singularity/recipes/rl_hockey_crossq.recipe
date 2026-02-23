@@ -1,0 +1,99 @@
+#header
+Bootstrap: docker
+From: nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+
+#Sections
+
+%help
+Cuda: 11.8
+cuDNN 9
+Python: 3.10
+TensorFlow 2.14 GPU
+PyTorch 2.0
+
+%setup
+# commands ecexuted on the host system after os has been installed
+
+%files
+# copy files from the host system here
+
+# use de repository servers since the official ones are not working in the moment  de.archive.ubuntu.com
+#/common/singularityImages/recipes/sources.list /etc/apt/sources.list
+
+
+%labels
+# information labels about the container  saved in /.singularity.d/labels.json
+  Version v0.1
+  overwrite False 
+  keras.version 2.13.1
+  pytorch.version 2.0.1
+  python.version 3.10
+  opencv.version 4.8.0
+  cudnn.version 8.6.0
+
+%environment
+# set environment variables
+
+%post
+#commands executed inside the container after os has been installed. Used for setup of the container
+apt-get update --fix-missing
+ln -fs /usr/share/zoneinfo/Europe/Berlin /etc/localtime
+
+
+apt-get install -y \
+  software-properties-common \
+  lsb-release \
+  wget \
+  ca-certificates \
+  apt-transport-https \
+  gnupg \
+  curl \
+  git \
+  build-essential \
+  swig \
+  tzdata \
+  python3-dev
+
+ln -s /usr/bin/swig /usr/local/bin/swig
+
+export DEBIAN_FRONTEND=noninteractive
+dpkg-reconfigure --frontend noninteractive tzdata
+curl -sS https://bootstrap.pypa.io/get-pip.py | python3
+
+pip install --upgrade pip setuptools wheel
+
+pip install numpy==1.26.4
+pip install torch==2.0.1+cu117 --index-url https://download.pytorch.org/whl/cu117
+pip install opencv-contrib-python==4.8.0.76 --no-deps
+pip install hydra-core
+pip install tensordict==0.2.1
+pip install torchrl==0.2.1 --no-deps
+pip install moviepy
+pip install Cython
+pip install zarr
+pip install tables
+pip install tyro
+pip install imageio
+pip install wandb
+pip install pygame
+pip install gymnasium[classic-control,box2d,mujoco]==0.29.1
+pip install tensorboard
+pip install colorednoise
+python3 -m pip install git+https://github.com/martius-lab/hockey-env.git --no-deps
+
+<<<<<<< HEAD
+
+=======
+>>>>>>> 13e19b4c6a890bd2240a18ead4a304e1dd7ec9f9
+echo '------------------------------------------------------------------'
+echo 'Versions of installed tools:'
+echo 'Python:'
+echo '$(python --version)'
+echo 'Python3:'
+echo '$(python3 --version)'
+echo 'cudnn:' $(find /usr -name "*cudnn.so.*")
+echo '------------------------------------------------------------------'
+
+%runscript
+# commands that are run when container's run command is used
+

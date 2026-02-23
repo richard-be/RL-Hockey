@@ -1,0 +1,9 @@
+exp_name: "default"
+
+env_id: "HalfCheetah-v5"
+is_hockey: false
+is_self_play: false
+
+total_timesteps: 1_000_000
+learning_starts: 10_000
+env_max_episode_steps: 1001

@@ -1,0 +1,7 @@
+exp_name: "pn_0x2_sp_1_learning-starts_2k5"
+
+
+is_self_play: true
+noise_type: "cn"
+noise_sigma: 0.2
+learning_starts: 2500

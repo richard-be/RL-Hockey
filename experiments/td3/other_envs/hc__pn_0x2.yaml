@@ -1,0 +1,12 @@
+exp_name: "pn_0x2"
+
+env_id: "HalfCheetah-v5"
+is_hockey: false
+
+is_self_play: false
+noise_type: "cn"
+noise_sigma: 0.2
+
+total_timesteps: 1_000_000
+learning_starts: 10_000
+env_max_episode_steps: 1001

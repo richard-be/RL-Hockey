@@ -11,12 +11,14 @@ import torch.nn.functional as F
 import torch.optim as optim
 import tyro
 from torch.utils.tensorboard import SummaryWriter
-
 # NOTE: FIXED IMPORTS HERE 
-from .algorithm.buffers import ReplayBuffer
+from torchrl.data import ReplayBuffer, TensorDictReplayBuffer, ListStorage, TensorDictPrioritizedReplayBuffer, LazyTensorStorage
+from tensordict import TensorDict
+
+# from .algorithm.buffers import ReplayBuffer, PrioritizedReplayBuffer, PrioritizedBatch
 from .env import make_env, make_hockey_env, make_hockey_env_self_play, HockeyPlayer, HockeyEnv
 from .algorithm.evaluation import evaluate, setup_eval_env
-from .algorithm.td3 import Actor, QNetwork
+from .algorithm.models import Actor, QNetwork
 
 # NOTE: ADDED THESE IMPORTS 
 from tqdm import tqdm 
@@ -26,15 +28,19 @@ from dataclasses import asdict
 
 # NOTE: added here, adapted from rnd.py
 from .algorithm.rnd import RNDModel, RunningMeanStd
-from .algorithm.colored_noise import reset_noise
+# from .algorithm.colored_noise import reset_noise
+# from ..sac.env.colored_noise import reset_noise
+from ..sac.sac_training import reset_noise
 from gymnasium.wrappers.vector import RecordEpisodeStatistics
 from typing import Tuple, Optional
-
+from .env import load_actor, disable_gradients
 import yaml
+
+
 
 @dataclass
 class Args:
-    exp_name: str = "rnd_0_pn_0x2_rnd-lr_1e5_rnd-recompute_False_sp-reuse_True"
+    exp_name: str = "test" #"rnd_0_pn_0x2_rnd-lr_1e5_rnd-recompute_False_sp-reuse_True"
     """the name of this experiment"""
     seed: int = 42
     """seed of the experiment"""
@@ -93,7 +99,8 @@ class Args:
     """hockey specific arguments: whether to use a weak opponent"""
     weak_opponent: bool = False 
     is_self_play: bool = True
-    self_play_initial_opponents: Tuple[Tuple[str, int]] = (("weak", 1200), ("strong", 1500)) # can disable strong opponent in self-play mode to only use it as validation opponent
+    self_play_initial_opponents: tuple = (("weak", 1200), ("strong", 1500)) # can disable strong opponent in self-play mode to only use it as validation opponent
+    self_play_additional_opponents: Optional[tuple] = None # list of ("<name>:<algorithm>:<path>", opponent_elo) to add to opponent pool 
     self_play_reuse_opponent_exp: bool = False # add opponent's transition experience to replay buffer to increase sample efficiency of self-play training
 
     # colored noise parameters
@@ -101,7 +108,6 @@ class Args:
     noise_beta: float = 1.0
     noise_sigma: float = 0.2 # TODO 
 
-    # TODO: is this necessary? 
     env_max_episode_steps: int = 252
 
     # rnd parameters 
@@ -120,6 +126,12 @@ class Args:
     rnd_recompute_int_reward_on_replay: bool = False
     rnd_learning_rate: float = 1e-5
     
+
+    # prioritized replay parameters
+    pr_alpha: float = 0.5
+    pr_beta: float = 0.4
+    pr_enabled: bool = False
+
     config: Optional[str] = None
     # NOTE: end of change
 
@@ -131,6 +143,24 @@ def load_yaml(path):
         except yaml.YAMLError as exc:
             print(exc)
 
+def rb_add(rb, obs, next_obs, action, extrinsic_reward, intrinsic_reward, done, info):
+    def ensure_tensor(x, dtype=torch.float32):
+        if isinstance(x, torch.Tensor):
+            return x
+        else:
+            return torch.as_tensor(x, dtype=dtype)
+
+    batch_size = obs.shape[0] if len(obs.shape) > 1 else 1 # check if vectorized env or not 
+    td = TensorDict({
+        "observation": ensure_tensor(obs),
+        "next_observation": ensure_tensor(next_obs),
+        "action": ensure_tensor(action),
+        "extrinsic_reward": ensure_tensor(extrinsic_reward),
+        "intrinsic_reward": ensure_tensor(intrinsic_reward),
+        "done": ensure_tensor(done, dtype=torch.bool),
+    }, batch_size=batch_size)
+    rb.extend(td)
+
 def main(): 
     args = tyro.cli(Args)
     if args.config is not None:
@@ -139,7 +169,7 @@ def main():
         for key, value in config_args.items():
             setattr(args, key, config_args[key])
 
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    run_name = f"{args.env_id}/{args.exp_name}__{args.seed}__{int(time.time())}"
     # NOTE: changed here to account for num_envs
     total_timesteps = args.total_timesteps # int(args.effective_timesteps / args.num_envs)
     learning_starts = args.learning_starts # int(args.effective_learning_starts / args.num_envs)
@@ -179,7 +209,7 @@ def main():
     # env setup
     # NOTE: changed env setup to support self-play
     if args.is_self_play:
-        player = HockeyPlayer(None, player_num=-1) # add actor after creating envs (depends on envs for obs/action space)
+        player = HockeyPlayer(None, player_num=-1, player_name="Self") # add actor after creating envs (depends on envs for obs/action space)
 
     print("initial opponents:", args.self_play_initial_opponents)
     def make_env_fn(idx, is_hockey=args.is_hockey, is_self_play=args.is_self_play): 
@@ -198,10 +228,11 @@ def main():
     def unwrap_env(env): 
         if isinstance(env, HockeyEnv): return env 
         else: return unwrap_env(env.env)  
-    unwrapped_envs = [unwrap_env(env) for env in envs.env.envs]
 
-    eval_player, eval_env, eval_env_unwrapped = setup_eval_env(args.hockey_mode, args.seed)
-    eval_env.observation_space.dtype = np.float32
+    if args.is_hockey:
+        unwrapped_envs = [unwrap_env(env) for env in envs.env.envs]
+        eval_player, eval_env, eval_env_unwrapped = setup_eval_env(args.hockey_mode, args.seed)
+        eval_env.observation_space.dtype = np.float32
     # END OF NOTE 
 
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
@@ -218,13 +249,24 @@ def main():
     q_optimizer = optim.Adam(list(qf1.parameters()) + list(qf2.parameters()), lr=args.learning_rate)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.learning_rate)
 
+    eval_custom_opponents = []
     # NOTE: added here: add model to player for self-play
-    if args.is_self_play:
-        player.actor = actor
-    eval_player.actor = actor
+    if args.is_hockey: 
+        if args.is_self_play:
+            player.actor = actor
+            # add other inital opponents that can be loaded now that the envs are initialized 
+            for opponent_id, opponent_elo in args.self_play_additional_opponents or []:
+                opponent_name, opponent_path = opponent_id.split(":", 1)
+                opponent_actor = disable_gradients(load_actor(opponent_path, envs, device=device))
+
+                for env in unwrapped_envs: 
+                    env.add_actor_to_opponent_pool(opponent_actor, opponent_name, opponent_elo)
+                # also evaluate against these opponents
+                eval_custom_opponents.append((opponent_name, opponent_actor))
+                print("Added opponent to train pool:", opponent_name, opponent_elo)
+        eval_player.actor = actor
 
     # NOTE: added RND model and optimizer here
-    # TODO: what should be the input and output dimensions of the RND model?
     # initialize model
     rnd_model = RNDModel(envs.single_observation_space.shape[0], args.rnd_feature_size).to(device)
     rnd_optimizer = optim.Adam(
@@ -233,22 +275,26 @@ def main():
         eps=1e-5,
     )
 
-    int_reward_rms = RunningMeanStd() # TODO: does this work? 
+    int_reward_rms = RunningMeanStd() 
     obs_rms = RunningMeanStd(shape=(envs.single_observation_space.shape[0], )) # NOTE: adapted shape  
-    # TODO: is this necessary? 
-    # rewards = torch.zeros((total_timesteps, args.num_envs)).to(device)
-    # curiosity_rewards = torch.zeros((total_timesteps, args.num_envs)).to(device)
 
     # END OF NOTE 
+    # rb_class, rb_kwargs = (ReplayBuffer, {}) if not args.pr_enabled else (PrioritizedReplayBuffer, {"alpha": args.pr_alpha, "beta": args.pr_beta})
 
-    rb = ReplayBuffer(
-        args.buffer_size,
-        envs.single_observation_space,
-        envs.single_action_space,
-        device,
-        n_envs=args.num_envs,
-        handle_timeout_termination=False, #TODO: change??
-    )
+    if args.pr_enabled:
+        rb = TensorDictPrioritizedReplayBuffer(storage=LazyTensorStorage(args.buffer_size, device=device), alpha=args.pr_alpha, beta=args.pr_beta)
+    else: 
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(args.buffer_size, device=device))
+
+    # rb = rb_class(
+    #     args.buffer_size,
+    #     envs.single_observation_space,
+    #     envs.single_action_space,
+    #     device,
+    #     n_envs=args.num_envs,
+    #     handle_timeout_termination=False, 
+    #     **rb_kwargs, 
+    # )
     start_time = time.time()
 
     # NOTE: CHANGED HERE: moved to seperate function
@@ -257,9 +303,9 @@ def main():
         torch.save((actor.state_dict(), qf1.state_dict(), qf2.state_dict()), model_path)
         print(f"model saved to {model_path}")
 
-        if n_eval_episodes > 0: 
+        if n_eval_episodes > 0 and args.is_hockey: 
             # NOTE: changed evaluation
-            results = evaluate(eval_env, eval_env_unwrapped, n_eval_episodes, actor, is_self_play=args.is_self_play, unwrapped_train_envs=unwrapped_envs, device=device)
+            results = evaluate(eval_env, eval_env_unwrapped, n_eval_episodes, actor, is_self_play=args.is_self_play, unwrapped_train_envs=unwrapped_envs, device=device, custom_opponents=eval_custom_opponents)
             for opponent_name, stats in results.items():
                 writer.add_scalar(f"eval/{opponent_name}/acum_reward", stats["reward"], current_step)
                 writer.add_scalar(f"eval/{opponent_name}/lose_rate", stats["lose_rate"], current_step) 
@@ -269,7 +315,7 @@ def main():
     # NOTE: moved RND normalization to separate function: 
     def normalize_obs(obs, eps=1e-8, clamp_range=(-5.0, 5.0)): 
         if type(obs) == np.ndarray:
-            obs = torch.from_numpy(obs).to(device)
+            obs = torch.from_numpy(obs).to(device, dtype=torch.float32)
         return ((obs - torch.tensor(obs_rms.mean, device=device, dtype=torch.float32)) / 
                         torch.sqrt(torch.tensor(obs_rms.var, device=device, dtype=torch.float32) + eps)).clamp(*clamp_range)
     
@@ -284,7 +330,7 @@ def main():
         if update_obs_rms:
             int_reward_rms.update(intrinsic_rewards)
         # Normalize intrinsic rewards and add to extrinsic rewards
-        # TODO: normalize by mean as well => does this make sense? 
+        # TODO: potentially normalize by mean as well
         # intrinsic_rewards = (intrinsic_rewards - int_reward_rms.mean) / np.sqrt(int_reward_rms.var + 1e-8)
         intrinsic_rewards /= np.sqrt(int_reward_rms.var + 1e-8)
         intrinsic_rewards = np.clip(intrinsic_rewards, 0, args.rnd_max_intrinsic_reward)
@@ -307,11 +353,20 @@ def main():
     action_clamp_high = torch.tensor(envs.single_action_space.high, device=device, dtype=torch.float32)
 
 
+    os.makedirs(f"models/td3/{args.env_id}", exist_ok=True)
+    os.makedirs(f"runs/td3/{args.env_id}", exist_ok=True)
+
     for global_step in tqdm(range(total_timesteps), "Training agent"):
         # ALGO LOGIC: put action logic here
         if global_step < learning_starts:
             actions = np.array([envs.single_action_space.sample() for _ in range(envs.num_envs)])
         else:
+            if args.pr_enabled:
+                # anneal PER beta to 1
+                rb.sampler.beta = min(
+                    1.0, args.pr_beta + global_step * (1.0 - args.pr_beta) / args.total_timesteps
+                )
+
             with torch.no_grad():
                 actions = actor(torch.Tensor(obs).to(device))
                 # NOTE: added colored noise here 
@@ -323,12 +378,11 @@ def main():
                     actions += args.noise_sigma * noise[env_indices, :, episode_steps]
                 actions = actions.clip(envs.single_action_space.low, envs.single_action_space.high)
 
-        # TRY NOT TO MODIFY: execute the game and log data.
+        # TRY NOT TO MODIFY: execute the game and log data
         next_obs, extrinsic_rewards, terminations, truncations, infos = envs.step(actions)
         
         episode_steps += 1 # NOTE: ADDED HERE for noise
 
-        # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "episode" in infos: 
             env_has_info = infos["_episode"]
             mean_episode_len = infos["episode"]['l'][env_has_info].mean()
@@ -343,7 +397,6 @@ def main():
             # Compute curiosity rewards
             intrinsic_rewards = compute_intrinsic_reward(next_obs)
 
-            # TODO: keep track of intrinsic and extrinsic rewards separately in the replay buffer?
             # total_rewards = args.rnd_ext_coef * extrinsic_rewards + args.rnd_int_coef * intrinsic_rewards
 
             writer.add_scalar("charts/intrinsic_reward", intrinsic_rewards.mean(), global_step) 
@@ -356,10 +409,11 @@ def main():
         real_next_obs = next_obs.copy()
         for idx, trunc in enumerate(truncations):
             if trunc:
-                real_next_obs[idx] = infos["final_observation"][idx]
+                if "final_observation" in infos and idx in infos["final_observation"]:
+                    real_next_obs[idx] = infos["final_observation"][idx]
 
         # NOTE: added intrinsic rewards to replay buffer
-        rb.add(obs, real_next_obs, actions, extrinsic_rewards, intrinsic_rewards, terminations, infos) 
+        rb_add(rb, obs, real_next_obs, actions, extrinsic_rewards, intrinsic_rewards, terminations, infos)
 
         if args.self_play_reuse_opponent_exp: 
             # NOTE added re-using opponent experience in self-play
@@ -368,7 +422,7 @@ def main():
             opponent_actions = infos["action_agent_two"]
             opponent_extrinsic_rewards = infos["reward_agent_two"]
             # NOTE: used same intrinsic reward for opponent (next state is the same)
-            rb.add(opponent_obs, real_next_obs, opponent_actions, opponent_extrinsic_rewards, intrinsic_rewards, terminations, infos)
+            rb_add(rb, opponent_obs, real_next_obs, opponent_actions, opponent_extrinsic_rewards, intrinsic_rewards, terminations, infos)
 
 
         # NOTE: ADDED HERE for noise computation 
@@ -394,39 +448,55 @@ def main():
             # END OF NOTE 
 
             with torch.no_grad():
-                clipped_noise = (torch.randn_like(data.actions, device=device) * args.policy_noise).clamp(
+                clipped_noise = (torch.randn_like(data["action"], device=device) * args.policy_noise).clamp(
                     -args.noise_clip, args.noise_clip
                 ) * target_actor.action_scale
 
-                next_state_actions = torch.clamp((target_actor(data.next_observations) + clipped_noise), 
+                next_state_actions = torch.clamp((target_actor(data["next_observation"]) + clipped_noise), 
                     action_clamp_low, action_clamp_high
                 )
-                qf1_next_target = qf1_target(data.next_observations, next_state_actions)
-                qf2_next_target = qf2_target(data.next_observations, next_state_actions)
+                qf1_next_target = qf1_target(data["next_observation"], next_state_actions)
+                qf2_next_target = qf2_target(data["next_observation"], next_state_actions)
                 min_qf_next_target = torch.min(qf1_next_target, qf2_next_target)
 
                 # NOTE: added intrinsic reward here
                 if args.rnd_recompute_int_reward_on_replay: 
-                    data_intrinsic_rewards = torch.from_numpy(compute_intrinsic_reward(data.next_observations, False)).to(device)
+                    data_intrinsic_rewards = torch.from_numpy(compute_intrinsic_reward(data["next_observation"], False)).to(device)
                 else: 
-                    data_intrinsic_rewards = data.intrinsic_rewards
-                data_total_rewards = args.rnd_ext_coef * data.extrinsic_rewards + args.rnd_int_coef * data_intrinsic_rewards
+                    data_intrinsic_rewards = data["intrinsic_reward"]
+                data_total_rewards = args.rnd_ext_coef * data["extrinsic_reward"] + args.rnd_int_coef * data_intrinsic_rewards
                 
-                next_q_value = data_total_rewards.flatten() + (1 - data.dones.flatten()) * args.gamma * (min_qf_next_target).view(-1)
+                next_q_value = data_total_rewards.flatten() + (~data["done"].flatten()) * args.gamma * (min_qf_next_target).view(-1)
                 # END OF NOTE 
-            qf1_a_values = qf1(data.observations, data.actions).view(-1)
-            qf2_a_values = qf2(data.observations, data.actions).view(-1)
-            qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
-            qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
-            qf_loss = qf1_loss + qf2_loss
+
+
+            qf1_a_values = qf1(data["observation"], data["action"]).view(-1)
+            qf2_a_values = qf2(data["observation"], data["action"]).view(-1)
+            # dont take mean yet, need individual losses for prioritized replay
+            qf1_loss = F.mse_loss(qf1_a_values, next_q_value, reduction="none")
+            qf2_loss = F.mse_loss(qf2_a_values, next_q_value, reduction="none")
+            
+            # NOTE: apply importance sampling weights to the loss for prioritized replay
+            loss_factor = 1 if not args.pr_enabled else data["priority_weight"]
+            qf_loss = ((qf1_loss + qf2_loss) * loss_factor).mean()
+
+            # NOTE: added priority update here
+            # apply importance sampling weights to the loss
+            # update priorities
+            if args.pr_enabled:
+                q_err1 = torch.abs(qf1_a_values - next_q_value).cpu().detach().numpy()
+                q_err2 = torch.abs(qf2_a_values - next_q_value).cpu().detach().numpy()
+                new_priorities = np.minimum(q_err1, q_err2) # use minimum of the two TD errors for priority update
+                rb.update_priority(data["index"], new_priorities)
 
             # NOTE: added RND loss here
-            # TODO: update RND model every step here or directly after collecting transition? 
-            rnd_next_obs = normalize_obs(data.next_observations) # NOTE: simplified here and moved to separate function
+            rnd_next_obs = normalize_obs(data["next_observation"]) # NOTE: simplified here and moved to separate function
             predict_next_state_feature, target_next_state_feature = rnd_model(rnd_next_obs) # NOTE: removed mb_inds here!
             rnd_loss = F.mse_loss(
                 predict_next_state_feature, target_next_state_feature.detach(), reduction="none"
             ).mean(-1)
+
+            rnd_loss = rnd_loss * loss_factor# fix dimensions and mean
 
             mask = torch.rand(len(rnd_loss), device=device)
             mask = (mask < args.rnd_update_proportion).float()
@@ -443,7 +513,9 @@ def main():
             q_optimizer.step()
 
             if global_step % args.policy_frequency == 0:
-                actor_loss = -qf1(data.observations, actor(data.observations)).mean()
+                actor_loss = -qf1(data["observation"], actor(data["observation"])).mean()
+                # actor_loss = -qf1(data.observations, actor(data.observations)).view(-1)
+                # actor_loss = (actor_loss * loss_factor).mean() # apply importance sampling weights to the loss and mean
                 actor_optimizer.zero_grad()
                 actor_loss.backward()
                 actor_optimizer.step()
@@ -459,8 +531,8 @@ def main():
             if global_step % 100 == 0:
                 writer.add_scalar("losses/qf1_values", qf1_a_values.mean().item(), global_step)
                 writer.add_scalar("losses/qf2_values", qf2_a_values.mean().item(), global_step)
-                writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
-                writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
+                writer.add_scalar("losses/qf1_loss", qf1_loss.mean().item(), global_step)
+                writer.add_scalar("losses/qf2_loss", qf2_loss.mean().item(), global_step)
                 writer.add_scalar("losses/qf_loss", qf_loss.item() / 2.0, global_step)
                 writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
                 
@@ -474,15 +546,18 @@ def main():
                 writer.add_scalar("charts/env_step", global_step*args.num_envs, global_step)
                 
                 writer.add_scalar("rnd/intrinsic_reward_replay", data_intrinsic_rewards.mean(), global_step)
-                writer.add_scalar("rnd/extrinsic_reward_replay", data.extrinsic_rewards.mean(), global_step)
+                writer.add_scalar("rnd/extrinsic_reward_replay", data["extrinsic_reward"].mean(), global_step)
                 writer.add_scalar("rnd/total_reward_replay", data_total_rewards.mean(), global_step)
                 if args.rnd_recompute_int_reward_on_replay: 
-                    writer.add_scalar("rnd/intrinsic_reward_replay_recompute_diff", (data.intrinsic_rewards - data_intrinsic_rewards).mean(), global_step)
-            
+                    writer.add_scalar("rnd/intrinsic_reward_replay_recompute_diff", (data["intrinsic_reward"] - data_intrinsic_rewards).mean(), global_step)
+
+                if args.pr_enabled:
+                    writer.add_scalar("charts/pr_beta", rb.sampler.beta, global_step)
+
             # NOTE: ADDED HERE
             if (global_step+1) % 1000 == 0: 
                 print("Saving intermediate model")
-                save_and_eval_model(global_step, 1)
+                save_and_eval_model(global_step, 10)
                 if args.is_self_play:
                     writer.add_scalar("self_play/player_elo", player.elo, global_step)
                     opponent_elo = np.mean([env.opponent.elo for env in unwrapped_envs])
