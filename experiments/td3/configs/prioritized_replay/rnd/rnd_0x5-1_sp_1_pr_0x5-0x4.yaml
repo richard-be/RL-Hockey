@@ -1,4 +1,4 @@
-exp_name: rnd_0x5-1_sp_1_pr_0x5-0x4
+exp_name: prioritized_replay/rnd_0x5-1_sp_1_pr_0x5-0x4
 
 rnd_int_coef: 0.5
 rnd_ext_coef: 1

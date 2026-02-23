@@ -9,8 +9,7 @@ wandb
 videos
 old_runs
 data
-runs_backup
+backups
 logs
-data_backup
 runs
 models

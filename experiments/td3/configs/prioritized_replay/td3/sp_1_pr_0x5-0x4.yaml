@@ -1,4 +1,4 @@
-exp_name: sp_1_pr_0x5-0x4
+exp_name: prioritized_replay/sp_1_pr_0x5-0x4
 
 is_self_play: true
 

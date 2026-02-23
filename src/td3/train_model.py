@@ -202,7 +202,7 @@ def main():
             monitor_gym=True,
             save_code=True,
         )
-    writer = SummaryWriter(f"runs/{run_name}")
+    writer = SummaryWriter(f"runs/td3/{run_name}")
     writer.add_text(
         "hyperparameters",
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
@@ -211,7 +211,7 @@ def main():
     # NOTE: added this to keep args as json 
     args_dict = asdict(args) 
     args_dict["hockey_mode"] = args.hockey_mode.name
-    json.dump(args_dict, open(f"runs/{run_name}/args.json", "w+"), indent=2)
+    json.dump(args_dict, open(f"runs/td3/{run_name}/args.json", "w+"), indent=2)
     # END OF NOTE 
 
     # TRY NOT TO MODIFY: seeding
@@ -314,14 +314,15 @@ def main():
     start_time = time.time()
 
     # NOTE: CHANGED HERE: moved to seperate function
-    def save_and_eval_model(current_step, n_eval_episodes = 1): 
-        model_path = f"models/td3/{run_name}.model"
-        torch.save((actor.state_dict(), qf1.state_dict(), qf2.state_dict()), model_path)
-        print(f"model saved to {model_path}")
+    def save_and_eval_model(current_step, n_eval_episodes = 1, save=True): 
+        if save:
+            model_path = f"models/td3/{run_name}/{current_step}.model"
+            torch.save((actor.state_dict(), qf1.state_dict(), qf2.state_dict()), model_path)
+            print(f"model saved to {model_path}")
 
         if n_eval_episodes > 0 and args.is_hockey: 
             # NOTE: changed evaluation
-            results = evaluate(eval_env, eval_env_unwrapped, n_eval_episodes, actor, is_self_play=args.is_self_play, unwrapped_train_envs=unwrapped_envs, device=device, custom_opponents=eval_custom_opponents)
+            results = evaluate(eval_env, eval_env_unwrapped, n_eval_episodes, actor, is_self_play=args.is_self_play, unwrapped_train_envs=unwrapped_envs, device=device, custom_opponents=eval_custom_opponents, seed=args.seed)
             for opponent_name, stats in results.items():
                 writer.add_scalar(f"eval/{opponent_name}/acum_reward", stats["reward"], current_step)
                 writer.add_scalar(f"eval/{opponent_name}/lose_rate", stats["lose_rate"], current_step) 
@@ -371,9 +372,9 @@ def main():
     action_clamp_high = torch.tensor(envs.single_action_space.high, device=device, dtype=torch.float32)
 
 
-    os.makedirs(f"models/td3/{args.env_id}", exist_ok=True)
-    os.makedirs(f"runs/td3/{args.env_id}", exist_ok=True)
-
+    os.makedirs(f"models/td3/{run_name}", exist_ok=False)
+    os.makedirs(f"runs/td3/{run_name}", exist_ok=True)
+    
     for global_step in tqdm(range(total_timesteps), "Training agent"):
         # ALGO LOGIC: put action logic here
         if global_step < learning_starts:
@@ -575,9 +576,8 @@ def main():
                     writer.add_scalar("charts/pr_beta", rb.sampler.beta, global_step)
 
             # NOTE: ADDED HERE
-            if (global_step+1) % 1000 == 0: 
-                print("Saving intermediate model")
-                save_and_eval_model(global_step, 10)
+            if global_step % 1000 == 0: 
+                save_and_eval_model(global_step, 10, save=(global_step % 10000 == 0))
                 if args.is_self_play:
                     writer.add_scalar("self_play/player_elo", player.elo, global_step)
                     opponent_elo = np.mean([env.opponent.elo for env in unwrapped_envs])
@@ -592,7 +592,7 @@ def main():
             # END NOTE 
 
     if args.save_model:
-        save_and_eval_model(total_timesteps, 10) # TODO: add evaluation
+        save_and_eval_model(total_timesteps, 10, save=True) # TODO: add evaluation
         # NOTE: removed model upload here
 
     envs.close()

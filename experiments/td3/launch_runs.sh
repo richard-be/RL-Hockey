@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-CONFIG_DIR="experiments/td3/configs"
-SCRIPT="src/td3/td3_cleanrl.py"
+CONFIG_DIR="experiments/td3/configs/pr"
+SCRIPT="-m scripts.td3.train"
 LOG_DIR="logs"
 
 mkdir -p "$LOG_DIR"
@@ -12,7 +12,7 @@ for config in "$CONFIG_DIR"/*.yaml; do
 
     echo "Launching $name"
 
-    python "$SCRIPT" \
+    python $SCRIPT \
         --config "$config" \
         > "$LOG_DIR/$name.out" \
         2> "$LOG_DIR/$name.out" &

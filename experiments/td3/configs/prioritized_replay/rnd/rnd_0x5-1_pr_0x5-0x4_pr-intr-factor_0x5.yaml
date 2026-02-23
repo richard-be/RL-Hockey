@@ -1,0 +1,10 @@
+exp_name: prioritized_replay/rnd_0x5-1_pr_0x5-0x4_pr-intr-factor_0x5
+
+rnd_int_coef: 0.5 
+rnd_ext_coef: 1
+is_self_play: true
+
+pr_enabled: true
+pr_alpha: 0.5
+pr_beta: 0.4
+pr_factor_int_reward: 0.5
