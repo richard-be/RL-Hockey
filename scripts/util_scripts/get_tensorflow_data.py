@@ -35,16 +35,23 @@ def save_scalar_data(path, output_dir, skip_existing=True):
         df.to_csv(os.path.join(output_dir, filename), index=False)
 
 
-log_dir = "./runs"
-output_dir = "./data"
-for run in tqdm(os.listdir(log_dir)):
-    if not os.path.isdir(os.path.join(log_dir, run)):
+log_dir = "./runs/td3/HockeyOne-v0/"
+output_dir = "./data/td3/HockeyOne-v0/"
+
+for experiment in tqdm(os.listdir(log_dir)):
+    if not os.path.isdir(os.path.join(log_dir, experiment)):
         continue
 
-    for file in os.listdir(os.path.join(log_dir, run)):
-        if file.startswith("events.out.tfevents"):
-            out_dir = f"./data/{run}"
-            os.makedirs(out_dir, exist_ok=True)
-            in_path = os.path.join(log_dir, run, file)
-            save_scalar_data(in_path, out_dir)
+    for run in os.listdir(os.path.join(log_dir, experiment)):
+        if not os.path.isdir(os.path.join(log_dir, experiment, run)):
+            continue
+
+        for file in os.listdir(os.path.join(log_dir, experiment, run)):
+            if file.startswith("events.out.tfevents"):
+                out_dir = os.path.join(output_dir, experiment, run)
+                os.makedirs(out_dir, exist_ok=True)
+
+                in_path = os.path.join(log_dir, experiment, run, file)
+                
+                save_scalar_data(in_path, out_dir)
 print("Done.")

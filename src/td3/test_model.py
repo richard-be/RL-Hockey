@@ -14,6 +14,8 @@ class Args:
     seed: int = 42
     """seed of the experiment"""
     time: str = "latest"
+    
+    model_checkpoint = "latest"
 
     weight_dir: str = "models/td3"
 
@@ -26,16 +28,16 @@ class Args:
     default_opponents: bool = True
     opponents: Optional[tuple] = ("") 
 
-def find_latest_time(pattern): 
+def find_latest_time(pattern, root_dir): 
     import glob 
     latest_time = 0
-    for f in glob.glob(pattern, root_dir="runs"):
+    for f in glob.glob(pattern, root_dir=root_dir):
         try: 
-            time = f.split("__")[-1]
+            time = f.split("__")[-1].split(".")[0]
             time = int(time) 
             latest_time = max(latest_time, time)
         except: 
-            print("Skipping", f)
+            print("Skipping", f, time)
             continue
     return latest_time
 
@@ -45,11 +47,15 @@ def main():
     player_path = args.player_path
 
     if not player_path: 
-        player_path = f"{args.env_id}/{args.expname}__{args.seed}__"
+        player_path = f"{args.expname}__{args.seed}__"
         if args.time == "latest": 
-            args.time = str(find_latest_time(player_path+"*"))
+            args.time = str(find_latest_time(player_path+"*", f"models/td3/{args.env_id}/"))
         player_path += args.time
-        player_path = f"td3:{args.weight_dir}/{player_path}.model"
+
+        model_weights_dir = f"{args.weight_dir}/{args.env_id}/{player_path}/"
+        checkpoint = find_latest_time(f"*.model", model_weights_dir) if args.model_checkpoint == "latest" else args.model_checkpoint
+
+        player_path = f"td3:{model_weights_dir}{checkpoint}.model"
     print(player_path) 
 
     opponents = None

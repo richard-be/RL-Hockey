@@ -1,9 +1,0 @@
-exp_name: "rnd_0x5-1_sp_1_learning-starts_2k5_no_noise"
-
-
-rnd_int_coef: 0.5
-rnd_ext_coef: 1
-is_self_play: true
-learning_starts: 2500
-noise_type: "cn"
-noise_sigma: 0.0
