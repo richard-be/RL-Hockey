@@ -1,5 +1,4 @@
 from src.crossq.models.feedforward import FeedForward, NNConfig
-import math
 
 import torch
 from torch import nn
@@ -18,6 +17,7 @@ class GaussianPolicyConfig(NNConfig):
 
     def __post_init__(self):
         self.output_dim = [self.action_dim, self.action_dim]
+
 
 
 class GaussianPolicy(FeedForward):
@@ -71,3 +71,9 @@ class GaussianPolicy(FeedForward):
             action, _, _ = self.get_action(torch.from_numpy(observations).to(torch.float32).unsqueeze(0))
             self.train()
             return action.squeeze(0).detach().cpu().numpy()
+
+
+"""
+
+bash src/client/autorestart.sh --token "adfbb097-e40d-4057-a4fe-8bddf3328677" --server-url "comprl.cs.uni-tuebingen.de" --server-port 65335 --args --agent="crq" --model="src/models/crossq/CrossQ-selfplay-Hockey-v0-42-1771773335-0.0003-1000000-False-BN/700000/model.pkl"
+"""

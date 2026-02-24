@@ -6,10 +6,11 @@ from pathlib import Path
 from collections import defaultdict
 
 
-base_path = Path(os.path.dirname(__file__)).parent
+base_path = Path(os.path.dirname(__file__)).parent.parent
 
 
 sys.path.append(str(base_path))
+sys.path.append(os.path.join(base_path, "crossq"))
 print(base_path)
 
 
@@ -65,6 +66,14 @@ class PlayerEnsemble:
     algorithm: str
     players: list[Player]
 
+<<<<<<< HEAD
+BASIC_PLAYER_POOL = [Player("CrossQ", "crq", "/Users/nargizi/Desktop/Uni/Masters/Reinforcement Learning/Project/RL-Hockey/src/crossq/models/crossq/CrossQ-selfplay-Hockey-v0-42-1771889166-0.0003-1000000-False-BRN/200000/model.pkl"),
+                    Player("SAC", "sac", "/Users/nargizi/Desktop/Uni/Masters/Reinforcement Learning/Project/RL-Hockey/models/sac/sac_0.0_False_2.0_0.05_4000000_1769853898.pkl"),
+                    Player("TD3", "td3", "/Users/nargizi/Desktop/Uni/Masters/Reinforcement Learning/Project/RL-Hockey/models/td3/HockeyOne-v0__rnd_0x5-1_sp_1__42__1771317357.model"),
+                    ]
+PLAYER_POOL = [PlayerEnsemble("Mean Action Ensemble", "mean", players=BASIC_PLAYER_POOL),
+               PlayerEnsemble("Greedy Action Ensemble", "greedy", players=BASIC_PLAYER_POOL)] + BASIC_PLAYER_POOL
+=======
 BASIC_PLAYER_POOL = [
     # Player("CrossQ", "crq", "/Users/nargizi/Desktop/Uni/Masters/Reinforcement Learning/Project/RL-Hockey/models/crossq_weight_norm/800000/model.pkl"),
     Player("SAC", "sac", "models/sac/sac_0.0_False_2.0_0.05_4000000_1769853898.pkl"),
@@ -76,6 +85,7 @@ PLAYER_POOL = [
     PlayerEnsemble("Greedy Action Ensemble", "greedy", players=BASIC_PLAYER_POOL),
     PlayerEnsemble("Weighted Mean Action Ensemble", "weighted", players=BASIC_PLAYER_POOL),
 ] + BASIC_PLAYER_POOL
+>>>>>>> main
 
 
 def run_tournament() -> None:

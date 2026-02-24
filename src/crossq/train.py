@@ -1,3 +1,11 @@
+import sys
+import os
+
+from pathlib import Path
+
+base_path = Path(os.path.dirname(__file__)).parent.parent
+sys.path.append(str(base_path))
+
 import hydra
 
 from hydra.core.config_store import ConfigStore

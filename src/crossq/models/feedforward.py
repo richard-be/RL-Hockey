@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from copy import deepcopy
 
 from src.crossq.models.batchrenorm import BatchRenorm1d
+from src.crossq.models.batchnorm import DetachedBatchNorm1d
 
 from collections import OrderedDict
 
@@ -58,7 +59,7 @@ class FeedForward(nn.Module):
 
         if config.use_normalization:
             if config.normalization_config.type == "BN":
-                input_norm_layer = nn.BatchNorm1d(num_features=config.input_dim,
+                input_norm_layer = DetachedBatchNorm1d(num_features=config.input_dim,
                                             momentum=config.normalization_config.momentum)
             else:
                 input_norm_layer = BatchRenorm1d(num_features=config.input_dim,
