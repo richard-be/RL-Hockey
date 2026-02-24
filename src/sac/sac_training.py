@@ -160,7 +160,7 @@ def main():
                 if info is not None:
                     reward_window.append(info['episode']['r'])
                     if args.self_play:
-                            opponent = envs.envs[env_index].get_opponent_name()
+                        opponent = envs.envs[env_index].get_opponent_name()
                     else:
                         opponent = "weak" if args.weak_opponent else "strong"
                     if info["winner"] in [-1, 1]:

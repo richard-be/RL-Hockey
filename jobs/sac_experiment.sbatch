@@ -42,7 +42,7 @@ for b in "${betas[@]}"; do
     done
 done
 
-combinations+=("2 0.0 True 0.0 2 1 200000 10")
+combinations+=("2 0.0 true 0.0 2 1 200000 10")
 i=0
 gpu_ids=(0 1 2 3)
 max_concurrent=4
@@ -57,7 +57,7 @@ for PARAM in "${combinations[@]}"; do
       --bind $PWD:/workspace \
       $PWD/singularity/images/rl_hockey.simg \
       bash -c "cd /workspace && python3 -m scripts.run_sac_training \
-      --alpha $alpha --beta $beta --total-timesteps $timesteps --track --num-envs $envs --no-weak-opponent --no-self-play --sigma $sigma --num-q $num_q --update-ratio $update_ratio"
+      --alpha $alpha --beta $beta --total-timesteps $timesteps --track --num-envs $envs --no-weak-opponent --sigma $sigma --num-q $num_q --update-ratio $update_ratio"
     )
 
     if [[ "$autotune" == "false" ]]; then
