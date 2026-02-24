@@ -16,7 +16,7 @@ import numpy as np
 from comprl.client import Agent, launch_client
 
 from utils.actors import Actor
-from utils.factory import construct_actor
+from utils.factory import construct_actor, construct_ensemble
 
 
 
@@ -50,19 +50,21 @@ def initialize_agent(agent_args: list[str]) -> Agent:
     parser.add_argument(
         "--agent",
         type=str,
-        choices=["td3", "sac", "crq"],
+        choices=["td3", "sac", "crq", "mean", "greedy", "weighted", "random"],
         default="crq",
         help="Which agent to use.",
     )
     parser.add_argument(
         "--model",
         type=str,
-        help="Path to model's weight")
+        help="Path to model's weight. For ensemble comma separated list of weight paths: `TD3_PATH,SAC_PATH,CRQ_PATH`")
     args = parser.parse_args(agent_args)
 
     # Initialize the agent based on the arguments.
-    
-    actor = construct_actor(args.agent, args.model, h_env.HockeyEnv_BasicOpponent())
+    if args.agent in ["mean", "greedy", "weighted", "random"]:
+        actor = construct_ensemble(args.agent, {alg: weight for alg, weight in zip(["td3", "sac", "crq"], args.model.split())}, h_env.HockeyEnv_BasicOpponent())
+    else:
+        actor = construct_actor(args.agent, args.model, h_env.HockeyEnv_BasicOpponent())
     agent: Agent = HockeyNeuralAgent(actor)
 
     # And finally return the agent.
