@@ -1,6 +1,6 @@
 
 import hockey.hockey_env as h_env
-from utils.actors import Actor
+from src.client.utils.actors import Actor
 import gymnasium as gym
 import numpy as np
 

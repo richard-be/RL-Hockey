@@ -36,6 +36,23 @@ class RandomActorEnsemble:
         return actor.act(observation)
 
 
+class WeightedMeanEnsemble: 
+    def __init__(self, actor_critics: list[ActorCritic], temperature: float = 1) -> None:
+        self.actor_critics = actor_critics
+        self.temperature = temperature
+
+    def act(self, observation: np.array) -> np.array:
+        actions = [act_crit.act(observation) for act_crit in self.actor_critics]
+        q_values = np.array([act_crit.estimate(observation=observation, action=action) for act_crit, action in zip(self.actor_critics, actions)])
+        weights = self.softmax(q_values) 
+        return np.sum(actions * weights, axis=0)
+
+    def softmax(self, xs): 
+        xs = xs / self.temperature
+        max_value = np.max(xs) 
+        exps = np.exp(xs - max_value)
+        return exps / np.sum(exps)
+
 class MeanActionEnsemble:
 
     def __init__(self, actors: list[Actor]) -> None:
