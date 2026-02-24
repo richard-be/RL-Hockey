@@ -18,7 +18,7 @@ import hockey.hockey_env as h_env
 from src.sac.env.colored_noise import generate_colored_noise
 import copy
 from collections import deque
-from src.td3.algorithm.td3 import Actor as Td3_Actor
+from src.td3.algorithm.models import Actor as Td3_Actor
 
 def make_env(seed, episode_count, device, weak_opponent, self_play, elo_system, env_mode="NORMAL", opponent_sampler=None):
     def thunk():
@@ -26,8 +26,7 @@ def make_env(seed, episode_count, device, weak_opponent, self_play, elo_system, 
             env = c_env.HockeyEnv_Custom_BasicOpponent(env_mode, weak_opponent)
         else:
             env = c_env.HockeyEnv_Custom_CustomOpponent(h_env.BasicOpponent(weak=True), device, mode=h_env.Mode[env_mode]) 
-            env = wrappers.OpponentResetWrapper(env, opponent_sampler, episode_count)
-            env = wrappers.EloWrapper(env, elo_system)
+            env = wrappers.OpponentResetWrapper(env, opponent_sampler, episode_count, elo_system)
      
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env.action_space.seed(seed)
@@ -68,7 +67,7 @@ def main():
     
     episode_count = wrappers.EpisodeCounter()
     elo_system = wrappers.EloSystem()
-    opponent_sampler = wrappers.OpponentSampler(args.self_play_len)
+    opponent_sampler = wrappers.OpponentSampler(args.self_play_len, elo_system)
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
@@ -89,10 +88,10 @@ def main():
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
 
     #initialization of other actors
-    """td3_actor = Td3_Actor(envs).to(device)
+    td3_actor = Td3_Actor(envs).to(device)
     td3_actor.load_state_dict(torch.load("models/td3/HockeyOne-v0__rnd_0x5-1_sp_1__42__1771317357.model")[0])
-    opponent_sampler.add_custom_opponent(td3_actor, "td3")
-    elo_system.register_player("td3")"""
+    opponent_sampler.add_opponent(td3_actor, "custom_td3")
+    elo_system.register_player("custom_td3")
 
     # Automatic entropy tuning
     if args.autotune:
@@ -124,7 +123,7 @@ def main():
     env_indices = np.arange(args.num_envs)
     episode_steps = np.zeros_like(env_indices)
     frozen_index = 0
-    winrate_window = deque(maxlen=args.winrate_window_size)
+    winrate_window = dict()
 
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
@@ -157,21 +156,25 @@ def main():
         if "final_info" in infos:
             for env_index, info in enumerate(infos["final_info"]):
                 if info is not None:
-                    winrate_window.append(int(info["winner"]==1))
-
-                    if episode_count.value % 50 == 0:
-                        sps = int(global_step / (time.time() - start_time))
-                        if args.self_play:
+                    if args.self_play:
                             opponent = envs.envs[env_index].get_opponent_name()
-                        else:
-                            opponent = "weak" if args.weak_opponent else "strong"
-                        print(f"episode={episode_count.value}, global_step={global_step}, env={env_index}, winrate={sum(winrate_window)/len(winrate_window)}, winner={info['winner']}, SPS={sps}, opponent={opponent}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
+                    else:
+                        opponent = "weak" if args.weak_opponent else "strong"
+                    if opponent in winrate_window:
+                        winrate_window[opponent].append(int(info["winner"]==1))
+                    else:
+                        winrate_window[opponent] = deque(maxlen=args.winrate_window_size)
+                        winrate_window[opponent].append(int(info["winner"]==1))
+                    if episode_count.value % 500 == 0:
+                        sps = int(global_step / (time.time() - start_time))
+                        print(f"episode={episode_count.value}, global_step={global_step}, env={env_index}, winrate={sum(winrate_window[opponent])/len(winrate_window[opponent])}, winner={info['winner']}, SPS={sps}, opponent={opponent}, episodic_return={info['episode']['r']}, episode_length={info['episode']['l']}")
                         print(elo_system.get_elo_dict())
                     if args.track:
                         writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                         writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
                         writer.add_scalar("charts/time_return", info["episode"]["r"], time.time()-start_time)
-                        writer.add_scalar("charts/winrate", sum(winrate_window)/len(winrate_window), global_step)
+                        writer.add_scalar(f"charts/winrate/{opponent}", sum(winrate_window[opponent])/len(winrate_window[opponent]), global_step)
+                
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()
@@ -244,9 +247,6 @@ def main():
                         alpha_loss.backward()
                         a_optimizer.step()
                         alpha = log_alpha.exp().item()
-            if global_step >= args.freeze_start and global_step % args.elo_update_frequency == 0:
-                #todo only start after freezing also starts
-                opponent_sampler.update_self_play_pool(elo_system.get_elo_dict())
 
             if global_step >= args.freeze_start and global_step % args.freeze_freq == 0 and args.self_play:
                 frozen_actor = copy.deepcopy(actor)
@@ -254,11 +254,13 @@ def main():
                 for p in frozen_actor.parameters():
                     p.requires_grad = False
                 frozen_index += 1
-                opponent_sampler.add_self_play_opponent(frozen_actor, frozen_index)
-                elo_system.register_player(f"self_{frozen_index}")
+                opponent_sampler.add_opponent(frozen_actor, f"self_{frozen_index}")
+                elo_system.register_player(f"self_{frozen_index}", elo_system.elo_dict["self_0"])
 
+        if args.track and global_step % args.save_freq == 0 and global_step > 0:
+            torch.save(actor.state_dict(), f"models/sac/{run_name}_{global_step}.pkl")
+            torch.save(q_networks[0].state_dict(), f"models/sac/{run_name}_{global_step}_q.pkl")
 
-    ##todo regelmäßig elo dict updaten und frozen actor zur elo und zur self_play_queue hinzufügen
     envs.close()
     if args.track:
         writer.close()

@@ -1,0 +1,7 @@
+exp_name: "rnd_0x5-1_sp_1_learning-starts_2k5"
+
+
+rnd_int_coef: 0.5
+rnd_ext_coef: 1
+is_self_play: true
+learning_starts: 2500

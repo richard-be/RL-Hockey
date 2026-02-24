@@ -13,11 +13,12 @@ def _evaluate_opponent_pool(
     actor, 
     eval_opponents, 
     render: bool = False, 
+    seed: int = 42,
 ):
     actor.eval()
 
     def run_episode(): 
-        obs, _ = env.reset()
+        obs, _ = env.reset(seed=seed)
         accum_reward = 0 
         episode_len = 0 
         done = False
@@ -100,7 +101,8 @@ def evaluate(
     unwrapped_train_envs = None,
     default_opponents = True,
     custom_opponents = None,
-    render: bool = False
+    render: bool = False, 
+    seed: int = 42,
 ):
     eval_opponents = []
     if default_opponents:
@@ -122,10 +124,12 @@ def evaluate(
             opponent.eval()
             eval_opponents.append((name, HockeyPlayer(opponent, player_num=len(eval_opponents), player_name=name)))
 
-    results = _evaluate_opponent_pool(env, unwrapped_env, n_eval_episodes, actor, eval_opponents, render)
+    results = _evaluate_opponent_pool(env, unwrapped_env, n_eval_episodes, actor, eval_opponents, render, seed=seed)
     
     current_results = {}
     
+    # for self-play evaluation, there now are stats "current_i" for all 1...n_env envs 
+    # instead, take the aveage over all envs 
     for opponent_name, opponent_results in results.items():
         if opponent_name.startswith("current_"):
             for r, value in opponent_results.items():
@@ -136,6 +140,7 @@ def evaluate(
         for i, _ in enumerate(unwrapped_train_envs): 
             results.pop(f"current_{i}")
         results["current"] = {r: np.mean(values) for r, values in current_results.items()}
+
     return results
 
 def run_evaluation(player_path, n_episodes=10, render=True, seed=42, hockey_mode=Mode.NORMAL, use_default_opponents=True, custom_opponents=None, device = "cpu"):
@@ -145,7 +150,7 @@ def run_evaluation(player_path, n_episodes=10, render=True, seed=42, hockey_mode
     actor = load_actor(player_path, env, device)
     player.actor = actor
 
-    results = evaluate(env, env_unwrapped, n_episodes, actor, device=device, default_opponents=use_default_opponents, custom_opponents=custom_opponents, render=render)
+    results = evaluate(env, env_unwrapped, n_episodes, actor, device=device, default_opponents=use_default_opponents, custom_opponents=custom_opponents, render=render, seed=seed)
     env.close()
     return results 
 
@@ -169,7 +174,7 @@ def run_evaluation_multiple_runs(player_paths, n_episodes=10, render=True, seed=
         
         player.actor = actor
         # evaluate this actor againts all actors (including itself)
-        results = _evaluate_opponent_pool(env, env_unwrapped, n_episodes, actor, opponent_pool, render=render)
+        results = _evaluate_opponent_pool(env, env_unwrapped, n_episodes, actor, opponent_pool, render=render, seed=seed)
         all_results[player_paths[i]] = results
         
     return all_results

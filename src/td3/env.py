@@ -6,6 +6,16 @@ from typing import List
 import torch 
 from .algorithm.models import Actor
 import pygame
+from src.crossq.crossq import GaussianPolicy, GaussianPolicyConfig
+
+def crossq_constructor(env) -> GaussianPolicy:
+    config = GaussianPolicyConfig(input_dim=np.prod(env.observation_space.shape),
+                          action_dim=np.prod(env.action_space.shape))
+    actor = GaussianPolicy(min_action=torch.from_numpy(env.action_space.low), 
+                        max_action=torch.from_numpy(env.action_space.high), 
+                        config=config)
+    return actor
+
 
 # NOTE: original env creation function 
 def make_env(env_id, seed, idx, capture_video, run_name):
@@ -195,51 +205,54 @@ def make_hockey_eval_env(seed, idx=0, mode=Mode.NORMAL):
     return thunk
 
 def load_actor(run_name: str, env, device="cpu"):
-    from .algorithm.models import Actor as TD3Actor
-    from ..sac.agent.sac import Actor as SACActor
+    # from .algorithm.models import Actor as TD3Actor
+    # from ..sac.agent.sac import Actor as SACActor
 
-    def add_act_method(actor):
-        def act(self, obs): 
-            with torch.no_grad(): 
-                obs = torch.as_tensor(obs, dtype=torch.float32).unsqueeze(0).to(next(self.parameters()).device)
-                action = self.forward(obs)
-                if isinstance(action, tuple):
-                    action = action[0]
-                return action.cpu().numpy()[0]
-        if not hasattr(actor, "act"):
-            setattr(actor, "act", act.__get__(actor, actor.__class__))
+    # def add_act_method(actor):
+    #     def act(self, obs): 
+    #         with torch.no_grad(): 
+    #             obs = torch.as_tensor(obs, dtype=torch.float32).unsqueeze(0).to(next(self.parameters()).device)
+    #             action = self.forward(obs)
+    #             if isinstance(action, tuple):
+    #                 action = action[0]
+    #             return action.cpu().numpy()[0]
+    #     if not hasattr(actor, "act"):
+    #         setattr(actor, "act", act.__get__(actor, actor.__class__))
 
-    assert ":" in run_name, "Weight path must be in format <algorithm>:<path>"
-    algorithm, path = run_name.split(":", 1)
+    # assert ":" in run_name, "Weight path must be in format <algorithm>:<path>"
+    # algorithm, path = run_name.split(":", 1)
     
-    actor_types = {
-        "sac": SACActor,
-        "td3": TD3Actor,
-        "crq": None, 
-    }
+    # actor_types = {
+    #     "sac": SACActor,
+    #     "td3": TD3Actor,
+    #     "crq": crossq_constructor,
+    # }
 
-    assert algorithm in actor_types, f"Unknown algorithm {algorithm}. Supported algorithms: {list(actor_types.keys())}"
-    actor_class = actor_types[algorithm]
-    if actor_class is None:
-        raise ValueError(f"Unknown external model type: {algorithm}")
+    # assert algorithm in actor_types, f"Unknown algorithm {algorithm}. Supported algorithms: {list(actor_types.keys())}"
+    # actor_class = actor_types[algorithm]
+    # if actor_class is None:
+    #     raise ValueError(f"Unknown external model type: {algorithm}")
     
 
-    actor_state = torch.load(path, map_location=device)
-    # TODO: this could be done better by creating different load functions for each model 
-    if isinstance(actor_state, tuple) and len(actor_state) == 3:   
-        # if it's a td3 model, just load the actor state
-        actor_state = actor_state[0] 
+    # actor_state = torch.load(path, map_location=device)
+    # # TODO: this could be done better by creating different load functions for each model 
+    # if isinstance(actor_state, tuple) and len(actor_state) == 3:   
+    #     # if it's a td3 model, just load the actor state
+    #     actor_state = actor_state[0] 
 
-    print(f"Loaded model from {path}")
+    # print(f"Loaded model from {path}")
     
-    if not hasattr(env, "single_observation_space"):
-        env.single_observation_space = env.observation_space
-    if not hasattr(env, "single_action_space"):
-        env.single_action_space = env.action_space
+    # if not hasattr(env, "single_observation_space"):
+    #     env.single_observation_space = env.observation_space
+    # if not hasattr(env, "single_action_space"):
+    #     env.single_action_space = env.action_space
 
-    actor = actor_class(env)
-    actor.load_state_dict(actor_state)
-    add_act_method(actor)
+    # actor = actor_class(env)
+    # actor.load_state_dict(actor_state)
+    # add_act_method(actor)
+
+    from src.client.utils.factory import construct_actor
+    actor = construct_actor(run_name.split(":")[0], run_name.split(":")[1], env)
 
     return actor.to(device)
 

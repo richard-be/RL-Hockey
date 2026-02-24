@@ -1,7 +1,0 @@
-exp_name: sp_1_pr_0x5-0x4
-
-is_self_play: true
-
-pr_enabled: true
-pr_alpha: 0.5
-pr_beta: 0.4

@@ -27,6 +27,8 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
     no_save: bool=False
     """whether to save the current run and actor"""
+    save_freq: int = 500000
+    """after how many global steps we save actor"""
 
     # Env specific arguments
     env_mode: str = "NORMAL"
@@ -73,7 +75,7 @@ class Args:
     """colored noise exponent"""
     sigma: float = 0.1
     """colored noise scaling"""
-    freeze_start: float = 1e5
+    freeze_start: float = 2e5
     """when to start freezing actors for self play"""
     freeze_freq: float = 1e5
     """number of steps until actor gets frozen for self play"""

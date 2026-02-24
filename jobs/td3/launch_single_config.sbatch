@@ -7,9 +7,7 @@
 # choose out of day, week, month depending on job duration
 #SBATCH --mem-per-cpu=3G
 # max 251GB per node
-#SBATCH --gres=gpu:1
-# how many gpus to use
-# each node has 4 gpus
+
 #SBATCH --time=23:00:00
 # job length: the job will run either until completion or until this timer runs out
 #SBATCH --error=outputs/td3/job.%J.err
@@ -28,11 +26,11 @@ if [ -z "$CURRENT_CONFIG" ]; then
   exit 1
 fi
 
-SCRIPT="src/td3/td3_cleanrl.py"
+SCRIPT="scripts.td3.train"
 echo "Launching config file $CURRENT_CONFIG"
 
 singularity exec \
     --nv \
     --bind $PWD:/workspace \
-    $PWD/singularity/images/rl_hockey_mbpo.simg \
-    python3 /workspace/$SCRIPT --config "$CURRENT_CONFIG"
+    $PWD/singularity/images/rl_hockey.simg \
+    python3 -m $SCRIPT --config "$CURRENT_CONFIG"

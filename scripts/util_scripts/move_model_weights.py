@@ -1,24 +1,19 @@
 # CHAT GPT GENERATED, ONLY TO MOVE FILES 
 import os
 import shutil
+src_root = "models/td3/HockeyOne-v0"
 
-src_root = "runs"
-dst_root = os.path.join("models", "td3")
 
-os.makedirs(dst_root, exist_ok=True)
-
-for run_name in os.listdir(src_root):
-    run_path = os.path.join(src_root, run_name)
-
-    if not os.path.isdir(run_path):
+for filename in os.listdir(src_root):
+    if os.path.isdir(os.path.join(src_root, filename)):
         continue
+    if filename.endswith(".model"):
+        sub_dir = f"models/td3/HockeyOne-v0/{filename.split('.')[0]}"
 
-    # find *.cleanrl_model file inside run directory
-    for filename in os.listdir(run_path):
-        if filename.endswith(".cleanrl_model"):
-            src_file = os.path.join(run_path, filename)
+        os.makedirs(sub_dir, exist_ok=False)
+        src_file = os.path.join(src_root, filename)
 
-            dst_file = os.path.join(dst_root, f"{run_name}.model")
+        dst_file = os.path.join(sub_dir, "1000000.model")
 
-            print(f"Moving {src_file} -> {dst_file}")
-            shutil.move(src_file, dst_file)
+        print(f"Moving {src_file} -> {dst_file}")
+        shutil.move(src_file, dst_file)

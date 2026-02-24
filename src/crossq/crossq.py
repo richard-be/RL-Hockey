@@ -5,14 +5,14 @@ import numpy as np
 
 
 
-from models.critic import QNetwork
-from models.actor import GaussianPolicy, GaussianPolicyConfig
-from models.feedforward import NNConfig, NormalizationConfig, get_gradient_norm
+from src.crossq.models.critic import QNetwork
+from src.crossq.models.actor import GaussianPolicy, GaussianPolicyConfig
+from src.crossq.models.feedforward import NNConfig, NormalizationConfig, get_gradient_norm
 
-from utils.elr import parameter_snapshot, measaure_effecitve_learning_rate
-from utils.hooks import register_relu_hooks, compute_dead_relu_metrics
+from src.crossq.utils.elr import parameter_snapshot, measaure_effecitve_learning_rate
+from src.crossq.utils.hooks import register_relu_hooks, compute_dead_relu_metrics
 
-from memory import ReplayBuffer
+from src.crossq.memory import ReplayBuffer
 
 from dataclasses import dataclass
 

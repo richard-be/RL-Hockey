@@ -30,13 +30,28 @@ from dataclasses import asdict
 from .algorithm.rnd import RNDModel, RunningMeanStd
 # from .algorithm.colored_noise import reset_noise
 # from ..sac.env.colored_noise import reset_noise
-from ..sac.sac_training import reset_noise
+# from ..sac.sac_training import reset_noise
+from ..sac.env.colored_noise import generate_colored_noise
 from gymnasium.wrappers.vector import RecordEpisodeStatistics
 from typing import Tuple, Optional
 from .env import load_actor, disable_gradients
 import yaml
 
 
+# NOTE: taken from Richard's implementation. 
+def reset_noise(i, noise, beta, samples, action_shape):
+    """
+    Recreate colored noise arrays
+    
+    :param i: Description
+    :param noise: old noise array
+    :param beta: noise exponent
+    :param samples: number of samples
+    :param action_shape: shape of one action
+    """
+    noise[i] = np.array([generate_colored_noise(samples, beta) for _ in range(action_shape)])
+    return noise
+# END OF NOTE 
 
 @dataclass
 class Args:
@@ -46,7 +61,7 @@ class Args:
     """seed of the experiment"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
-    cuda: bool = True
+    cuda: bool = False
     """if toggled, cuda will be enabled by default"""
     track: bool = True
     """if toggled, this experiment will be tracked with Weights and Biases"""
@@ -131,6 +146,7 @@ class Args:
     pr_alpha: float = 0.5
     pr_beta: float = 0.4
     pr_enabled: bool = False
+    pr_factor_int_reward: float = 0
 
     config: Optional[str] = None
     # NOTE: end of change
@@ -186,7 +202,7 @@ def main():
             monitor_gym=True,
             save_code=True,
         )
-    writer = SummaryWriter(f"runs/{run_name}")
+    writer = SummaryWriter(f"runs/td3/{run_name}")
     writer.add_text(
         "hyperparameters",
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
@@ -195,7 +211,7 @@ def main():
     # NOTE: added this to keep args as json 
     args_dict = asdict(args) 
     args_dict["hockey_mode"] = args.hockey_mode.name
-    json.dump(args_dict, open(f"runs/{run_name}/args.json", "w+"), indent=2)
+    json.dump(args_dict, open(f"runs/td3/{run_name}/args.json", "w+"), indent=2)
     # END OF NOTE 
 
     # TRY NOT TO MODIFY: seeding
@@ -205,7 +221,7 @@ def main():
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-
+    print("device:", device)
     # env setup
     # NOTE: changed env setup to support self-play
     if args.is_self_play:
@@ -298,14 +314,15 @@ def main():
     start_time = time.time()
 
     # NOTE: CHANGED HERE: moved to seperate function
-    def save_and_eval_model(current_step, n_eval_episodes = 1): 
-        model_path = f"models/td3/{run_name}.model"
-        torch.save((actor.state_dict(), qf1.state_dict(), qf2.state_dict()), model_path)
-        print(f"model saved to {model_path}")
+    def save_and_eval_model(current_step, n_eval_episodes = 1, save=True): 
+        if save:
+            model_path = f"models/td3/{run_name}/{current_step}.model"
+            torch.save((actor.state_dict(), qf1.state_dict(), qf2.state_dict()), model_path)
+            print(f"model saved to {model_path}")
 
         if n_eval_episodes > 0 and args.is_hockey: 
             # NOTE: changed evaluation
-            results = evaluate(eval_env, eval_env_unwrapped, n_eval_episodes, actor, is_self_play=args.is_self_play, unwrapped_train_envs=unwrapped_envs, device=device, custom_opponents=eval_custom_opponents)
+            results = evaluate(eval_env, eval_env_unwrapped, n_eval_episodes, actor, is_self_play=args.is_self_play, unwrapped_train_envs=unwrapped_envs, device=device, custom_opponents=eval_custom_opponents, seed=args.seed)
             for opponent_name, stats in results.items():
                 writer.add_scalar(f"eval/{opponent_name}/acum_reward", stats["reward"], current_step)
                 writer.add_scalar(f"eval/{opponent_name}/lose_rate", stats["lose_rate"], current_step) 
@@ -319,7 +336,7 @@ def main():
         return ((obs - torch.tensor(obs_rms.mean, device=device, dtype=torch.float32)) / 
                         torch.sqrt(torch.tensor(obs_rms.var, device=device, dtype=torch.float32) + eps)).clamp(*clamp_range)
     
-    def compute_intrinsic_reward(next_obs, update_obs_rms=True): 
+    def compute_intrinsic_reward(next_obs, update_obs_rms=True, norm_by_mean=False): 
         with torch.no_grad():
             rnd_next_obs = normalize_obs(next_obs) # NOTE: similified and moved to separate function
             predict_next_feature, target_next_feature = rnd_model(rnd_next_obs) # NOTE: removed mb_inds here!
@@ -331,6 +348,8 @@ def main():
             int_reward_rms.update(intrinsic_rewards)
         # Normalize intrinsic rewards and add to extrinsic rewards
         # TODO: potentially normalize by mean as well
+        if norm_by_mean:
+            intrinsic_rewards -= int_reward_rms.mean
         # intrinsic_rewards = (intrinsic_rewards - int_reward_rms.mean) / np.sqrt(int_reward_rms.var + 1e-8)
         intrinsic_rewards /= np.sqrt(int_reward_rms.var + 1e-8)
         intrinsic_rewards = np.clip(intrinsic_rewards, 0, args.rnd_max_intrinsic_reward)
@@ -347,15 +366,15 @@ def main():
     # NOTE: END OF RICHARD'S CODE 
 
     # TRY NOT TO MODIFY: start the game
-    obs, _ = envs.reset(seed=args.seed)
+    obs, _ = envs.reset(seed=[args.seed+i for i in range(args.num_envs)])
 
     action_clamp_low = torch.tensor(envs.single_action_space.low, device=device, dtype=torch.float32)
     action_clamp_high = torch.tensor(envs.single_action_space.high, device=device, dtype=torch.float32)
 
 
-    os.makedirs(f"models/td3/{args.env_id}", exist_ok=True)
-    os.makedirs(f"runs/td3/{args.env_id}", exist_ok=True)
-
+    os.makedirs(f"models/td3/{run_name}", exist_ok=False)
+    os.makedirs(f"runs/td3/{run_name}", exist_ok=True)
+    
     for global_step in tqdm(range(total_timesteps), "Training agent"):
         # ALGO LOGIC: put action logic here
         if global_step < learning_starts:
@@ -486,7 +505,9 @@ def main():
             if args.pr_enabled:
                 q_err1 = torch.abs(qf1_a_values - next_q_value).cpu().detach().numpy()
                 q_err2 = torch.abs(qf2_a_values - next_q_value).cpu().detach().numpy()
-                new_priorities = np.minimum(q_err1, q_err2) # use minimum of the two TD errors for priority update
+                q_err = np.minimum(q_err1, q_err2) # use minimum of the two TD errors for priority update
+                int_reward = compute_intrinsic_reward(data["next_observation"], update_obs_rms=False)
+                new_priorities = (1 - args.pr_factor_int_reward) *q_err + args.pr_factor_int_reward * int_reward
                 rb.update_priority(data["index"], new_priorities)
 
             # NOTE: added RND loss here
@@ -555,9 +576,8 @@ def main():
                     writer.add_scalar("charts/pr_beta", rb.sampler.beta, global_step)
 
             # NOTE: ADDED HERE
-            if (global_step+1) % 1000 == 0: 
-                print("Saving intermediate model")
-                save_and_eval_model(global_step, 10)
+            if global_step % 1000 == 0: 
+                save_and_eval_model(global_step, 10, save=(global_step % 10000 == 0))
                 if args.is_self_play:
                     writer.add_scalar("self_play/player_elo", player.elo, global_step)
                     opponent_elo = np.mean([env.opponent.elo for env in unwrapped_envs])
@@ -572,7 +592,7 @@ def main():
             # END NOTE 
 
     if args.save_model:
-        save_and_eval_model(total_timesteps, 10) # TODO: add evaluation
+        save_and_eval_model(total_timesteps, 10, save=True) # TODO: add evaluation
         # NOTE: removed model upload here
 
     envs.close()

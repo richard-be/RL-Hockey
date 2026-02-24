@@ -30,26 +30,26 @@ sigmas=(0.01)
 update_ratios=(10)
 num_q_values=(5 10)
 combinations=()
-for b in "${betas[@]}"; do
-    for a in "${alphas[@]}"; do
-        for sigma in "${sigmas[@]}"; do
-            for num_q in "${num_q_values[@]}"; do
-                for update_ratio in "${update_ratios[@]}"; do
-                    combinations+=("$b $a false $sigma $num_q $update_ratio 200000")
-                done
-            done
-        done
-    done
-done
+#for b in "${betas[@]}"; do
+#    for a in "${alphas[@]}"; do
+#        for sigma in "${sigmas[@]}"; do
+#            for num_q in "${num_q_values[@]}"; do
+#                for update_ratio in "${update_ratios[@]}"; do
+#                    combinations+=("$b $a false $sigma $num_q $update_ratio 200000")
+#                done
+#            done
+#        done
+#    done
+#done
 
-combinations+=("$b $a false $sigma 5 20 200000")
-combinations+=("$b $a false $sigma 2 1 400000")
+combinations+=("2 0.0 false 0.01 2 1 200000 4")
+combinations+=("2 0.0 false 0.01 2 1 200000 10")
 i=0
 gpu_ids=(0 1 2 3)
 max_concurrent=4
 
 for PARAM in "${combinations[@]}"; do
-    read beta alpha autotune sigma num_q update_ratio timesteps <<< "$PARAM"
+    read beta alpha autotune sigma num_q update_ratio timesteps envs <<< "$PARAM"
     
     export CUDA_VISIBLE_DEVICES="${gpu_ids[i % 4]}"
     i=$((i+1))
@@ -58,7 +58,7 @@ for PARAM in "${combinations[@]}"; do
       --bind $PWD:/workspace \
       $PWD/singularity/images/rl_hockey.simg \
       bash -c "cd /workspace && python3 -m scripts.run_sac_training \
-      --alpha $alpha --beta $beta --total-timesteps $timesteps --track --num-envs 4 --no-weak-opponent --no-self-play --sigma $sigma --num-q $num_q --update-ratio $update_ratio"
+      --alpha $alpha --beta $beta --total-timesteps $timesteps --track --num-envs $envs --no-weak-opponent --no-self-play --sigma $sigma --num-q $num_q --update-ratio $update_ratio"
     )
 
     if [[ "$autotune" == "false" ]]; then
