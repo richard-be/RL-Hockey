@@ -35,14 +35,14 @@ for b in "${betas[@]}"; do
         for sigma in "${sigmas[@]}"; do
             for num_q in "${num_q_values[@]}"; do
                 for update_ratio in "${update_ratios[@]}"; do
-                    combinations+=("$b $a false $sigma $num_q $update_ratio 200000 4")
+                    combinations+=("$b $a false $sigma $num_q $update_ratio 200000 10")
                 done
             done
         done
     done
 done
 
-combinations+=("2 0.0 True 0.0 2 1 200000 4")
+combinations+=("2 0.0 True 0.0 2 1 200000 10")
 i=0
 gpu_ids=(0 1 2 3)
 max_concurrent=4

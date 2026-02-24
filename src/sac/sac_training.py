@@ -78,7 +78,6 @@ def main():
     max_action = float(envs.single_action_space.high[0])
 
     actor = Actor(envs).to(device)
-    actor.load_state_dict(torch.load("models/sac/sac_2_1_1000000_1771781495.pkl"))
     q_networks = [SoftQNetwork(envs).to(device) for _ in range(args.num_q)]
     q_targets = [SoftQNetwork(envs).to(device) for _ in range(args.num_q)]
     params = []

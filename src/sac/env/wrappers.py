@@ -63,7 +63,7 @@ class OpponentSampler():
     """if global_episode < 7e3:
       probs = [0, 1, 0]
     else:"""
-    probs = [0, 0.1, 0.9]
+    probs = [0, 1, 0]
     return probs
          
   def add_opponent(self, actor, name):
