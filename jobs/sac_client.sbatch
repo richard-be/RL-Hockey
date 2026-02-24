@@ -27,5 +27,6 @@ singularity exec \
   --nv \
   --bind $PWD:/workspace \
   $PWD/singularity/images/rl_hockey_client.simg \
-  bash -c "/workspace/src/client/autorestart.sh --token 49415f80-886d-4325-b0cb-e100d93cdd17 --args --agent=sac --model=models/sac/sac_2_1_1000000_1771781495.pkl"
+  bash -c "/workspace/src/client/autorestart.sh \
+  --token 49415f80-886d-4325-b0cb-e100d93cdd17 --server-url "comprl.cs.uni-tuebingen.de" --server-port 65335 --args --agent=sac --model=models/sac/sac_2_1_1000000_1771781495.pkl"
 
