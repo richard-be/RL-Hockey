@@ -178,6 +178,7 @@ def main():
                         writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
                         writer.add_scalar("charts/time_return", info["episode"]["r"], time.time()-start_time)
                         writer.add_scalar(f"charts/winrate/{opponent}", sum(winrate_window[opponent])/len(winrate_window[opponent]), global_step)
+                        writer.add_scalar("charts/winrate_raw", info["winner"], global_step)
                 
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
