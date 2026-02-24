@@ -24,7 +24,7 @@
 # here will be your commands for running the script
 
 
-alphas=(0.0, 0.1, 0.2, 0.3)
+alphas=(0.0 0.1 0.2 0.3)
 betas=(2)
 sigmas=(0.0)
 update_ratios=(1)
