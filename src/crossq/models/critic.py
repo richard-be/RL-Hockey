@@ -1,6 +1,6 @@
 import torch
 import math
-from crossq.models.feedforward import FeedForward, NNConfig
+from src.crossq.models.feedforward import FeedForward, NNConfig
 
 
 @torch.no_grad()

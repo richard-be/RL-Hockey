@@ -1,4 +1,4 @@
-from crossq.models.feedforward import FeedForward, NNConfig
+from src.crossq.models.feedforward import FeedForward, NNConfig
 import math
 
 import torch

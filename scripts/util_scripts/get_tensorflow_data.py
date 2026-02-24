@@ -37,6 +37,7 @@ def save_scalar_data(path, output_dir, skip_existing=True):
 
 log_dir = "./runs/td3/HockeyOne-v0/"
 output_dir = "./data/td3/HockeyOne-v0/"
+skip_existing = False
 
 for experiment in tqdm(os.listdir(log_dir)):
     if not os.path.isdir(os.path.join(log_dir, experiment)):
@@ -53,5 +54,5 @@ for experiment in tqdm(os.listdir(log_dir)):
 
                 in_path = os.path.join(log_dir, experiment, run, file)
                 
-                save_scalar_data(in_path, out_dir)
+                save_scalar_data(in_path, out_dir, skip_existing)
 print("Done.")

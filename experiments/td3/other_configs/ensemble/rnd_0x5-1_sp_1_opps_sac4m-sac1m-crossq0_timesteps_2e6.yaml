@@ -1,5 +1,6 @@
-exp_name: ensemble/rnd_0x5-1_sp_1_opps_sac4m-sac1m-crossq0
+exp_name: ensemble/rnd_0x5-1_sp_1_opps_sac4m-sac1m-crossq0_timesteps_2e6
 
+total_timesteps: 2000000
 rnd_int_coef: 0.5
 rnd_ext_coef: 1
 is_self_play: true

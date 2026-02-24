@@ -18,7 +18,7 @@ def _evaluate_opponent_pool(
     actor.eval()
 
     def run_episode(): 
-        obs, _ = env.reset(seed)
+        obs, _ = env.reset(seed=seed)
         accum_reward = 0 
         episode_len = 0 
         done = False
@@ -128,6 +128,8 @@ def evaluate(
     
     current_results = {}
     
+    # for self-play evaluation, there now are stats "current_i" for all 1...n_env envs 
+    # instead, take the aveage over all envs 
     for opponent_name, opponent_results in results.items():
         if opponent_name.startswith("current_"):
             for r, value in opponent_results.items():
@@ -138,6 +140,7 @@ def evaluate(
         for i, _ in enumerate(unwrapped_train_envs): 
             results.pop(f"current_{i}")
         results["current"] = {r: np.mean(values) for r, values in current_results.items()}
+
     return results
 
 def run_evaluation(player_path, n_episodes=10, render=True, seed=42, hockey_mode=Mode.NORMAL, use_default_opponents=True, custom_opponents=None, device = "cpu"):

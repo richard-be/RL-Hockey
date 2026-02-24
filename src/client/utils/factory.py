@@ -1,20 +1,20 @@
 import torch
 import numpy as np
 
-from crossq.models.actor import GaussianPolicyConfig, GaussianPolicy
-from crossq.models.critic import QNetwork as CrossQCritic
-from td3.algorithm.models import Actor as TD3Actor
-from td3.algorithm.models import QNetwork as TD3Critic
-from sac.agent.sac import Actor as SACActor
-from sac.agent.sac import SoftQNetwork as SACCritic
+from src.crossq.models.actor import GaussianPolicyConfig, GaussianPolicy
+from src.crossq.models.critic import QNetwork as CrossQCritic
+from src.td3.algorithm.models import Actor as TD3Actor
+from src.td3.algorithm.models import QNetwork as TD3Critic
+from src.sac.agent.sac import Actor as SACActor
+from src.sac.agent.sac import SoftQNetwork as SACCritic
 
-from utils.actors import Actor, ActorCritic, Critic, GreedyEnsemble, MeanActionEnsemble, RandomActorEnsemble
+from src.client.utils.actors import Actor, ActorCritic, Critic, GreedyEnsemble, MeanActionEnsemble, RandomActorEnsemble
 
 def crossq_constructor(env) -> GaussianPolicy:
-    config = GaussianPolicyConfig(input_dim=np.prod(env.observation_space.shape),
-                          action_dim=np.prod(env.action_space.shape))
-    actor = GaussianPolicy(min_action=torch.from_numpy(env.action_space.low), 
-                        max_action=torch.from_numpy(env.action_space.high), 
+    config = GaussianPolicyConfig(input_dim=np.prod(env.single_observation_space.shape),
+                          action_dim=np.prod(env.single_action_space.shape))
+    actor = GaussianPolicy(min_action=torch.from_numpy(env.single_action_space.low), 
+                        max_action=torch.from_numpy(env.single_action_space.high), 
                         config=config)
     return actor
 
@@ -39,6 +39,7 @@ ACTOR_CONSTRUCTORS = {
 }
 
 def load_actor_weights(actor: torch.nn.Module, weight_path: str, device: str) -> None:
+    print("loading weights from", weight_path)
     actor_state = torch.load(weight_path, map_location=device)
     if (isinstance(actor_state, tuple) or isinstance(actor_state, list)) and len(actor_state) == 3:   
         actor_state = actor_state[0] 

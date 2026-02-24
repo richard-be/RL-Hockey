@@ -366,7 +366,7 @@ def main():
     # NOTE: END OF RICHARD'S CODE 
 
     # TRY NOT TO MODIFY: start the game
-    obs, _ = envs.reset(seed=args.seed)
+    obs, _ = envs.reset(seed=[args.seed+i for i in range(args.num_envs)])
 
     action_clamp_low = torch.tensor(envs.single_action_space.low, device=device, dtype=torch.float32)
     action_clamp_high = torch.tensor(envs.single_action_space.high, device=device, dtype=torch.float32)

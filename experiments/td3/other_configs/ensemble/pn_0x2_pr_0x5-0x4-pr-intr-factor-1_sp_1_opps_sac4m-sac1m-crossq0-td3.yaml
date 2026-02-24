@@ -1,0 +1,23 @@
+exp_name: ensemble/pn_0x2_pr_0x5-0x4-pr-intr-factor-1_sp_1_opps_sac4m-sac1m-crossq0-td3
+
+is_self_play: true
+self_play_additional_opponents: 
+  - - "td3rnd:td3:models/td3/HockeyOne-v0/intrinsic_rewards/rnd_0x5-1_sp_1__42__1771317357/1000000.model"
+    - 1900
+  - - "sac4m:sac:models/sac/sac_0.0_False_2.0_0.05_4000000_1769853898.pkl"
+    - 1700
+  - - "sac1m:sac:models/sac/sac_2_1_1000000_1771781495.pkl"
+    - 1800
+  - - "crossq0:crq:models/crossq/model.pkl"
+    - 1650
+
+rnd_int_coef: 0
+rnd_ext_coef: 1
+
+noise_type: "cn"
+noise_sigma: 0.2
+
+pr_enabled: true
+pr_alpha: 0.5
+pr_beta: 0.4
+pr_factor_int_reward: 1

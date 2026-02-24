@@ -1,0 +1,8 @@
+exp_name: ensemble/rnd_0x5-1_sp_1_opps_td3
+
+rnd_int_coef: 0.5
+rnd_ext_coef: 1
+is_self_play: true
+self_play_additional_opponents: 
+  - - "td3rnd:td3:models/td3/HockeyOne-v0/intrinsic_rewards/rnd_0x5-1_sp_1__42__1771317357/1000000.model"
+    - 1700
