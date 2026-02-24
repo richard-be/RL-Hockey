@@ -2,10 +2,24 @@ import numpy as np
 from typing import Protocol
 
 
+
 class Critic(Protocol):
 
     def estimate(self, observation: np.array, action: np.array) -> float:
         ...
+
+
+
+class CriticEnsemble:
+
+    def __init__(self, critics: list[Critic]):
+        self.critics = critics
+
+    def estimate(self, observation: np.array, action: np.array) -> float:
+        return min([critic.estimate(observation=observation,
+                                    action=action) for critic in self.critics])
+
+
 
 class Actor(Protocol):
 
@@ -13,17 +27,20 @@ class Actor(Protocol):
         ...
 
 
+
 class ActorCritic:
+
     def __init__(self, actor: Actor, critic: Critic):
         self.actor = actor
         self.critic = critic
 
     def act(self, observation: np.array) -> np.array:
-        return self.actor.act(observation=observation)
+        return self.actor.act(observation)
 
 
     def estimate(self, observation: np.array, action: np.array) -> float:
-        return self.critic.act(observation=observation, action=action)
+        return self.critic.estimate(observation, action)
+
 
 
 class RandomActorEnsemble:
@@ -36,6 +53,7 @@ class RandomActorEnsemble:
         return actor.act(observation)
 
 
+
 class MeanActionEnsemble:
 
     def __init__(self, actors: list[Actor]) -> None:
@@ -45,9 +63,11 @@ class MeanActionEnsemble:
         actions = np.array([actor.act(observation) for actor in self.actors])
         mean_action = actions.mean(axis=0)
         return mean_action
-    
+
+
 
 class GreedyEnsemble:
+
     def __init__(self, actor_critics: list[ActorCritic]) -> None:
         self.actor_critics = actor_critics
 
@@ -56,3 +76,6 @@ class GreedyEnsemble:
         max_idx = np.argmax(np.array([act_crit.estimate(observation=observation, action=action) 
                                       for act_crit, action in zip(self.actor_critics, actions)]))
         return actions[max_idx]
+
+
+
