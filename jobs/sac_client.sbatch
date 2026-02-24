@@ -10,7 +10,7 @@
 #SBATCH --gres=gpu:1
 # how many gpus to use
 # each node has 4 gpus
-#SBATCH --time=19:00:00
+#SBATCH --time=01:00:00
 # job length: the job will run either until completion or until this timer runs out
 #SBATCH --error=outputs/sac/job.%J.err
 # %J is the job ID, errors will be written to this file
