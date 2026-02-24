@@ -126,6 +126,7 @@ def main():
     frozen_index = 0
     winrate_window = dict()
     reward_window = deque(maxlen=args.winrate_window_size)
+    last_freeze = 0
 
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
