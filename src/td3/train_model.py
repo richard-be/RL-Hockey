@@ -322,12 +322,15 @@ def main():
 
         if n_eval_episodes > 0 and args.is_hockey: 
             # NOTE: changed evaluation
-            results = evaluate(eval_env, eval_env_unwrapped, n_eval_episodes, actor, is_self_play=args.is_self_play, unwrapped_train_envs=unwrapped_envs, device=device, custom_opponents=eval_custom_opponents, seed=args.seed)
+            actor.eval()
+            with torch.no_grad():
+                results = evaluate(eval_env, eval_env_unwrapped, n_eval_episodes, actor, is_self_play=args.is_self_play, unwrapped_train_envs=unwrapped_envs, device=device, custom_opponents=eval_custom_opponents, seed=args.seed)
             for opponent_name, stats in results.items():
                 writer.add_scalar(f"eval/{opponent_name}/acum_reward", stats["reward"], current_step)
                 writer.add_scalar(f"eval/{opponent_name}/lose_rate", stats["lose_rate"], current_step) 
                 writer.add_scalar(f"eval/{opponent_name}/win_rate", stats["win_rate"], current_step) 
                 writer.add_scalar(f"eval/{opponent_name}/draw_rate", stats["draw_rate"], current_step)
+            actor.train()
 
     # NOTE: moved RND normalization to separate function: 
     def normalize_obs(obs, eps=1e-8, clamp_range=(-5.0, 5.0)): 
@@ -406,6 +409,8 @@ def main():
             env_has_info = infos["_episode"]
             mean_episode_len = infos["episode"]['l'][env_has_info].mean()
             writer.add_scalar("charts/mean_episode_length", mean_episode_len, global_step)
+            mean_return = infos["episode"]["r"][env_has_info].mean()
+            writer.add_scalar("charts/mean_episode_return", mean_return, global_step)
 
         # NOTE: added here for RND
         # First update obs running means
