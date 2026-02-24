@@ -16,10 +16,10 @@ print(base_path)
 from dataclasses import dataclass
 import numpy as np
 
-from utils.actors import Actor
-from utils.factory import construct_actor, construct_ensemble
+from src.client.utils.actors import Actor
+from src.client.utils.factory import construct_actor, construct_ensemble
 import hockey.hockey_env as h_env
-from utils.env import HockeyEnv_AgenticOpponent
+from src.client.utils.env import HockeyEnv_AgenticOpponent
 
 
 def run_episode(env, actor: Actor, render=False) -> int: 
@@ -65,12 +65,17 @@ class PlayerEnsemble:
     algorithm: str
     players: list[Player]
 
-BASIC_PLAYER_POOL = [Player("CrossQ", "crq", "/Users/nargizi/Desktop/Uni/Masters/Reinforcement Learning/Project/RL-Hockey/models/crossq_weight_norm/800000/model.pkl"),
-                    Player("SAC", "sac", "/Users/nargizi/Desktop/Uni/Masters/Reinforcement Learning/Project/RL-Hockey/models/sac/sac_0.0_False_2.0_0.05_4000000_1769853898.pkl"),
-                    # Player("TD3", "td3", "/Users/nargizi/Desktop/Uni/Masters/Reinforcement Learning/Project/RL-Hockey/models/td3/HockeyOne-v0__rnd_0x5-1_sp_1__42__1771317357.model"),
-                    ]
-PLAYER_POOL = [PlayerEnsemble("Mean Action Ensemble", "mean", players=BASIC_PLAYER_POOL),
-               PlayerEnsemble("Random Action Ensemble", "random", players=BASIC_PLAYER_POOL)] + BASIC_PLAYER_POOL
+BASIC_PLAYER_POOL = [
+    # Player("CrossQ", "crq", "/Users/nargizi/Desktop/Uni/Masters/Reinforcement Learning/Project/RL-Hockey/models/crossq_weight_norm/800000/model.pkl"),
+    Player("SAC", "sac", "models/sac/sac_0.0_False_2.0_0.05_4000000_1769853898.pkl"),
+    Player("TD3", "td3", "models/td3/HockeyOne-v0__rnd_0x5-1_sp_1__42__1771317357.model")
+]
+PLAYER_POOL = [
+    PlayerEnsemble("Mean Action Ensemble", "mean", players=BASIC_PLAYER_POOL),
+    PlayerEnsemble("Random Action Ensemble", "random", players=BASIC_PLAYER_POOL),
+    PlayerEnsemble("Greedy Action Ensemble", "greedy", players=BASIC_PLAYER_POOL),
+    PlayerEnsemble("Weighted Mean Action Ensemble", "weighted", players=BASIC_PLAYER_POOL),
+] + BASIC_PLAYER_POOL
 
 
 def run_tournament() -> None:

@@ -8,7 +8,7 @@ from src.td3.algorithm.models import QNetwork as TD3Critic
 from src.sac.agent.sac import Actor as SACActor
 from src.sac.agent.sac import SoftQNetwork as SACCritic
 
-from src.client.utils.actors import Actor, ActorCritic, Critic, GreedyEnsemble, MeanActionEnsemble, RandomActorEnsemble
+from src.client.utils.actors import Actor, ActorCritic, Critic, GreedyEnsemble, MeanActionEnsemble, RandomActorEnsemble, WeightedMeanEnsemble
 
 def crossq_constructor(env) -> GaussianPolicy:
     config = GaussianPolicyConfig(input_dim=np.prod(env.single_observation_space.shape),
@@ -98,18 +98,20 @@ def construct_actor_critic(algorithm: str,
                               weight_path=weight_path,
                               env=env,
                               device=device)
-    return ActorCritic(actor=actor, ciritc=critic)
+    return ActorCritic(actor=actor, critic=critic)
 
 ENSEMBELE_PIECE_CONSTRUCTORS = {
     "random": construct_actor,
     "mean": construct_actor,
-    "greedy": construct_actor_critic
+    "greedy": construct_actor_critic,
+    "weighted": construct_actor_critic
 }
 
 ENSEMBELE_CONSTRUCTORS = {
     "random": RandomActorEnsemble,
     "mean": MeanActionEnsemble,
-    "greedy": GreedyEnsemble
+    "greedy": GreedyEnsemble,
+    "weighted": WeightedMeanEnsemble, 
 }
 
 def construct_ensemble(algorithm: str,
