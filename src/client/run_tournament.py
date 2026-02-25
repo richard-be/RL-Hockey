@@ -67,14 +67,14 @@ class PlayerEnsemble:
     players: list[Player]
 
 BASIC_PLAYER_POOL = [
-    # Player("CrossQ", "crq", "/Users/nargizi/Desktop/Uni/Masters/Reinforcement Learning/Project/RL-Hockey/models/crossq_weight_norm/800000/model.pkl"),
-    Player("SAC", "sac", "models/sac/sac_0.0_False_2.0_0.05_4000000_1769853898.pkl"),
-    Player("TD3", "td3", "models/td3/HockeyOne-v0__rnd_0x5-1_sp_1__42__1771317357.model")
+    Player("CrossQ", "crq", "/Users/nargizi/Desktop/Uni/Masters/Reinforcement Learning/Project/RL-Hockey/models/crossq/CrossQ-selfplay-Hockey-v0-42-1771963191-0.001-1000000-True-BN/1200000/model.pkl"),
+    Player("SAC", "sac", "/Users/nargizi/Desktop/Uni/Masters/Reinforcement Learning/Project/RL-Hockey/models/sac/combined_models.model"),
+    Player("TD3", "td3", "/Users/nargizi/Desktop/Uni/Masters/Reinforcement Learning/Project/RL-Hockey/models/td3/HockeyOne-v0__rnd_0x5-1_sp_1__42__1771317357.model")
 ]
 PLAYER_POOL = [
-    PlayerEnsemble("Mean Action Ensemble", "mean", players=BASIC_PLAYER_POOL),
-    PlayerEnsemble("Random Action Ensemble", "random", players=BASIC_PLAYER_POOL),
-    PlayerEnsemble("Greedy Action Ensemble", "greedy", players=BASIC_PLAYER_POOL),
+    # PlayerEnsemble("Mean Action Ensemble", "mean", players=BASIC_PLAYER_POOL),
+    # PlayerEnsemble("Random Action Ensemble", "random", players=BASIC_PLAYER_POOL),
+    # PlayerEnsemble("Greedy Action Ensemble", "greedy", players=BASIC_PLAYER_POOL),
     PlayerEnsemble("Weighted Mean Action Ensemble", "weighted", players=BASIC_PLAYER_POOL),
 ] + BASIC_PLAYER_POOL
 

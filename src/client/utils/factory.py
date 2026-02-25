@@ -48,8 +48,15 @@ def load_actor_weights(actor: torch.nn.Module, weight_path: str, device: str) ->
         actor_state = actor_state[0]
     actor.load_state_dict(actor_state)
 
+
+def load_sac_actor_weights(actor: torch.nn.Module, weight_path: str, device: str) -> None:
+    actor_state = torch.load(weight_path, map_location=device, weights_only=False)
+    if (isinstance(actor_state, tuple) or isinstance(actor_state, list)) and len(actor_state) > 1:   
+        actor_state: torch.nn.Module = actor_state[0]
+    actor.load_state_dict(actor_state.state_dict())
+
 ACTOR_WEIGHT_LOADER_FUNCTIONS = {
-    "sac": load_actor_weights,
+    "sac": load_sac_actor_weights,
     "td3": load_actor_weights,
     "crq": load_actor_weights, 
 }
@@ -126,8 +133,20 @@ def load_critic_weights(critics: list[torch.nn.Module], weight_path: str, device
     return CriticEnsemble(critics)
 
 
+def load_sac_weights(critics: list[torch.nn.Module], weight_path: str, device: str) -> None:
+
+    model_states = torch.load(weight_path, map_location=device, weights_only=False)
+   
+    if (isinstance(model_states, tuple) or isinstance(model_states, list)) and len(model_states) >= 1:   
+        model_states: list[torch.nn.Module] = model_states[1:]
+    for critic, model_state in zip(critics, model_states):
+        critic.load_state_dict(model_state.state_dict())
+
+    return CriticEnsemble(critics)
+
+
 CRITIC_WEIGHT_LOADER_FUNCTIONS = {
-    "sac": load_critic_weights,
+    "sac": load_sac_weights,
     "td3": load_critic_weights,
     "crq": load_critic_weights, 
 }
@@ -145,7 +164,7 @@ def construct_critic(algorithm: str,
     critic_constructor, weight_loader = CRITIC_CONSTRUCTORS[algorithm], CRITIC_WEIGHT_LOADER_FUNCTIONS[algorithm]
 
     critics = [critic_constructor(env), critic_constructor(env)]
-
+ 
     critics = weight_loader(critics, weight_path, device)
 
     return critics
