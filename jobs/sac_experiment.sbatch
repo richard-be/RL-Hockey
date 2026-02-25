@@ -65,7 +65,7 @@ for PARAM in "${combinations[@]}"; do
     fi
 
     echo "Running experiment: alpha=$alpha beta=$beta autotune=$autotune sigma=$sigma"
-    echo $cmd
+    echo "${cmd[@]}"
     "${cmd[@]}" &
 
     # throttle: wait every 4 jobs
