@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-CONFIG_DIR="experiments/td3/configs/pr"
+CONFIG_DIR="experiments/td3/final/generalization/default"
 SCRIPT="-m scripts.td3.train"
 LOG_DIR="logs"
 

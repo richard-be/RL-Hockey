@@ -1,0 +1,8 @@
+exp_name: final/no_sp/default/default_1_pr_0
+
+rnd_int_coef: 0 # disable intrinsic rewards, only use for prioritization
+rnd_ext_coef: 1
+is_self_play: false
+
+pr_enabled: false
+total_timesteps: 1_000_000

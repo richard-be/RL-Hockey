@@ -1,0 +1,8 @@
+exp_name: final/no_sp/rnd/rnd_1-0_pr_0
+
+rnd_int_coef: 1
+rnd_ext_coef: 0
+is_self_play: false
+
+pr_enabled: false
+total_timesteps: 1_000_000

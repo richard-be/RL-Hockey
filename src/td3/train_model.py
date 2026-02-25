@@ -117,7 +117,7 @@ class Args:
     self_play_initial_opponents: tuple = (("weak", 1200), ("strong", 1500)) # can disable strong opponent in self-play mode to only use it as validation opponent
     self_play_additional_opponents: Optional[tuple] = None # list of ("<name>:<algorithm>:<path>", opponent_elo) to add to opponent pool 
     self_play_reuse_opponent_exp: bool = False # add opponent's transition experience to replay buffer to increase sample efficiency of self-play training
-
+    additional_eval_opponents: Optional[tuple] = None # list of ("<name>:<algorithm>:<path>", opponent_elo) to add to evaluation opponent pool (not trained against, just to evaluate generalization)
     # colored noise parameters
     noise_type: str = "normal" # "normal" or "cn" (colored noise)
     noise_beta: float = 1.0
@@ -279,8 +279,15 @@ def main():
                     env.add_actor_to_opponent_pool(opponent_actor, opponent_name, opponent_elo)
                 # also evaluate against these opponents
                 eval_custom_opponents.append((opponent_name, opponent_actor))
-                print("Added opponent to train pool:", opponent_name, opponent_elo)
+                print("Added opponent to train & eval pool:", opponent_name, opponent_elo)
         eval_player.actor = actor
+
+        # add additional opponents to evaluation opponent pool
+        for opponent_id in args.additional_eval_opponents or []:
+            opponent_name, opponent_path = opponent_id.split(":", 1)
+            opponent_actor = disable_gradients(load_actor(opponent_path, envs, device=device))
+            eval_custom_opponents.append((opponent_name, opponent_actor))
+            print("Added opponent to evaluation pool only:", opponent_name)
 
     # NOTE: added RND model and optimizer here
     # initialize model
@@ -411,6 +418,17 @@ def main():
             writer.add_scalar("charts/mean_episode_length", mean_episode_len, global_step)
             mean_return = infos["episode"]["r"][env_has_info].mean()
             writer.add_scalar("charts/mean_episode_return", mean_return, global_step)
+
+        if "winner" in infos:
+            outcome = infos["winner"][terminations]
+            n_won = (outcome == 1).sum()
+            n_lost = (outcome == -1).sum()
+            n_draw = (outcome == 0).sum()
+
+            writer.add_scalar("episode/n_won", n_won, global_step)
+            writer.add_scalar("episode/n_lost", n_lost, global_step)
+            writer.add_scalar("episode/n_draw", n_draw, global_step)
+            writer.add_scalar("episode/n_terms", len(outcome), global_step)
 
         # NOTE: added here for RND
         # First update obs running means

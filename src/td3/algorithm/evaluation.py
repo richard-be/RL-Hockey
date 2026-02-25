@@ -136,7 +136,7 @@ def evaluate(
                 if r not in current_results:
                     current_results[r] = []
                 current_results[r].append(value)
-    if unwrapped_train_envs is not None:
+    if unwrapped_train_envs is not None and is_self_play:
         for i, _ in enumerate(unwrapped_train_envs): 
             results.pop(f"current_{i}")
         results["current"] = {r: np.mean(values) for r, values in current_results.items()}
