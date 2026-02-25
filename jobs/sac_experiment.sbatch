@@ -52,17 +52,21 @@ for PARAM in "${combinations[@]}"; do
     
     export CUDA_VISIBLE_DEVICES="${gpu_ids[i % 4]}"
     i=$((i+1))
+    
+    inner_cmd="cd /workspace && python3 -m scripts.run_sac_training \
+        --alpha $alpha --beta $beta --total-timesteps $timesteps \
+        --track --num-envs $envs --no-weak-opponent \
+        --sigma $sigma --num-q $num_q --update-ratio $update_ratio"
+
+    if [[ "$autotune" == "false" ]]; then
+        inner_cmd="$inner_cmd --no-autotune"
+    fi
     cmd=(singularity exec \
       --nv \
       --bind $PWD:/workspace \
       $PWD/singularity/images/rl_hockey.simg \
-      bash -c "cd /workspace && python3 -m scripts.run_sac_training \
-      --alpha $alpha --beta $beta --total-timesteps $timesteps --track --num-envs $envs --no-weak-opponent --sigma $sigma --num-q $num_q --update-ratio $update_ratio"
+      bash -c "$inner_cmd"
     )
-
-    if [[ "$autotune" == "false" ]]; then
-        cmd+=(--no-autotune)
-    fi
 
     echo "Running experiment: alpha=$alpha beta=$beta autotune=$autotune sigma=$sigma"
     echo "${cmd[@]}"
