@@ -9,7 +9,8 @@ The implementation is based on CleanRL's implementations of TD3, RND, and PER:
 - TD3: https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/td3_continuous_action.py
 - RND: https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/ppo_rnd_envpool.py
 - PER: https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/rainbow_atari.py
-Own modifications were marked with Notes whereever possible. The use of pink noise was implemented by Richard Below. 
+
+Own modifications were marked with Notes whereever possible. The use of pink noise was implemented by Richard Below. Smart auto-completion by Github co-pilot was used for the implementation. 
 
 ## SAC
 

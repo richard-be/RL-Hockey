@@ -1,5 +1,3 @@
-# NOTE: This script was only for testing; the function to plot q-values was written using ChatGPT, but is not used in the final project.
-
 import torch 
 from src.td3.env import make_hockey_eval_env, load_actor
 from src.td3.algorithm.models import Actor, QNetwork
