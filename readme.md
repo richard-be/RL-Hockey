@@ -17,9 +17,20 @@ Own modifications were marked with Notes whereever possible. The use of pink noi
 The implementation is based on CleanRL SAC implementation for continuous actions. We added colored noise for action exploration and Randomized Ensembled Double Q-Learning for a higher Update-to-data ratio.
 
 ## CrossQ
-The implementation is based on [CrossQ]{https://arxiv.org/abs/1902.05605}
+The implementation is based on [CrossQ](https://arxiv.org/abs/1902.05605) and recently proposed [CrossQ + Weight Normalization](https://arxiv.org/abs/2502.07523) papers. 
+
 
 ## Ensemble
+Ensemble models combine predictions of all three model variants in different manners:
+
+* **Random Action Ensemble**: Uniformly sampling a model.
+
+* **Mean Action Ensemlbe**: Averaging predicted actions.
+
+* **Weighted Mean Ensemble**: Taking the mean of the predicted actions, weighted by their critic's predicted value.
+
+* **Greedy Mean Ensemble**: Taking the action of the model with the highest predicted value from its critic.
+
 
 ## Folders
 **experiments** contains config files that define the different TD3 training configurations.
