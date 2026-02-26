@@ -13,7 +13,7 @@ The ensemble model combining TD3, SAC and CrossQ ranked 6th out of 178 participa
 ## Ensemble
 
 ## Folders
-experiments contains...
+**experiments** contains...
 
 **jobs** contains the batch files used for scheduling jobs on the cluster
 
