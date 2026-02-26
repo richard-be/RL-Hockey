@@ -1,9 +1,9 @@
 import numpy as np
 import hockey.hockey_env as h_env
 import gymnasium as gym
-import heapq
 
 class OpponentResetWrapper(gym.Wrapper):
+  """Wrapper allowing to reset opponent upon episode termination"""
   def __init__(self, env, opponent_sampler, episode_count, elo_system):
     super().__init__(env)
     self.opponent_sampler = opponent_sampler
@@ -29,7 +29,7 @@ class OpponentResetWrapper(gym.Wrapper):
     return obs, reward, terminated, truncated, info
   
 class OpponentSampler():
-  """samples opponent, keeps dict of ids and players"""
+  """samples opponents based on defined probabilities, keeps dict of ids and players"""
   def __init__(self, self_play_len, elo_system):
     self.opponents = {"easy": h_env.BasicOpponent(), "hard": h_env.BasicOpponent(weak=False)}
     self.self_play_pool = []
@@ -78,6 +78,7 @@ class EpisodeCounter:
         return self.value
     
 class EloSystem:
+  """calculate and store elo of players"""
   def __init__(self, k = 32):
     self.elo_dict = {"self_0": 1500, "easy": 1500, "hard": 1500}
     self.k = k

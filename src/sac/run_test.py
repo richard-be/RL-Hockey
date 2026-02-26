@@ -1,17 +1,16 @@
-#based on cleanrl sac_continuous action implementation
 import tyro
 import random
 import time
 import gymnasium as gym
 import numpy as np
 import torch
-from torch.utils.tensorboard import SummaryWriter
 from agent.sac import Actor
 import hockey.hockey_env as h_env
 from dataclasses import dataclass
 import os
 import env.custom_hockey as c_env
 
+"""play games between differnet agents, render and compute winrates"""
 
 
 def make_env(env_id, seed, weak_opponent, env_mode, opponent, device, opponent_model=None):

@@ -5,6 +5,8 @@ import heapq
 import torch
 from itertools import accumulate
 
+"""Different hockey env variants for reward tuning and manual opponent setting"""
+
 class HockeyEnv_Custom(h_env.HockeyEnv):
   def get_reward(self, info):
     r = self._compute_reward()
@@ -14,6 +16,7 @@ class HockeyEnv_Custom(h_env.HockeyEnv):
     return float(r)
   
 class HockeyEnv_Custom_BasicOpponent(HockeyEnv_Custom):
+  """Env for playing against basic opponent"""
   def __init__(self, mode=h_env.Mode.NORMAL, weak_opponent=False):
     super().__init__(mode=mode, keep_mode=True)
     self.opponent = h_env.BasicOpponent(weak=weak_opponent)
@@ -27,6 +30,7 @@ class HockeyEnv_Custom_BasicOpponent(HockeyEnv_Custom):
     return super().step(action2)
   
 class HockeyEnv_Custom_CustomOpponent(HockeyEnv_Custom):
+  """Env for playing against custom opponent that can be reset for each episode"""
   def __init__(self, opponent, device, mode=h_env.Mode.NORMAL):
     super().__init__(mode=mode, keep_mode=True)
     self.opponent = opponent
@@ -49,6 +53,7 @@ class HockeyEnv_Custom_CustomOpponent(HockeyEnv_Custom):
     return super().step(action2)
 
 class HockeyEnv_HumanOppoent(h_env.HockeyEnv):
+  """env for playing against human opponent for fun purposes"""
   def __init__(self, mode=h_env.Mode.NORMAL):
     super().__init__(mode=mode, keep_mode=True)
     self.opponent = h_env.HumanOpponent(self, player=2)

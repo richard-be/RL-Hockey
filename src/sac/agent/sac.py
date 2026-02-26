@@ -149,6 +149,7 @@ class Actor(nn.Module):
         return mean, log_std
 
     def get_action(self, x):
+        """get action with log probs and mean for training"""
         mean, log_std = self(x)
         std = log_std.exp()
         normal = torch.distributions.Normal(mean, std)
@@ -163,6 +164,7 @@ class Actor(nn.Module):
         return action, log_prob, mean
     
     def act(self, obs):
+        """only return action for inference"""
         x = torch.from_numpy(obs).float().to(next(self.parameters()).device)
         mean, log_std = self(x)
         std = log_std.exp()

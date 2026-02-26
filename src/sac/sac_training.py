@@ -20,6 +20,9 @@ import copy
 from collections import deque
 from src.td3.algorithm.models import Actor as Td3_Actor
 
+
+"""SAC training pipeline with colored noise, RedQ and self play"""
+
 def make_env(seed, episode_count, device, weak_opponent, self_play, elo_system, env_mode="NORMAL", opponent_sampler=None):
     def thunk():
         if not self_play:
@@ -75,8 +78,7 @@ def main():
     )
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
-    max_action = float(envs.single_action_space.high[0])
-
+    #model setup    
     actor = Actor(envs).to(device)
     q_networks = [SoftQNetwork(envs).to(device) for _ in range(args.num_q)]
     q_targets = [SoftQNetwork(envs).to(device) for _ in range(args.num_q)]
@@ -252,7 +254,7 @@ def main():
                         alpha_loss.backward()
                         a_optimizer.step()
                         alpha = log_alpha.exp().item()
-
+            #actor checkpoint freezing to self play queue if performance has increased (winrate is high)
             if global_step >= args.freeze_start and global_step-last_freeze > args.freeze_freq and sum(reward_window)/len(reward_window) > 5 and args.self_play:
                 frozen_actor = copy.deepcopy(actor)
                 frozen_actor.eval()
@@ -263,7 +265,7 @@ def main():
                 elo_system.register_player(f"self_{frozen_index}", elo_system.elo_dict["self_0"])
                 last_freeze = global_step
                 print("freeze", global_step)
-
+        #checkpoint storing to filesystem
         if args.track and global_step % args.save_freq == 0 and global_step > 0:
             torch.save(actor.state_dict(), f"models/sac/{run_name}_{global_step}.pkl")
             torch.save(q_networks[0].state_dict(), f"models/sac/{run_name}_{global_step}_q.pkl")

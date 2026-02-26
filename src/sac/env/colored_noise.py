@@ -1,6 +1,7 @@
 import numpy as np
 
 def generate_colored_noise(N, beta):
+    """generate colored noise samples array of length N for colored noise exponent beta"""
     spectrum = np.zeros(N, dtype=np.complex128)
     k = np.arange(1, N//2+1)
     f = k/N
