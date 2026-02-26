@@ -20,9 +20,9 @@ run_groups = {
 }
 
 metrics = [
-    {"key": "eval/strong/win_rate", "metric_label": "Win Rate (Strong Opponent)", "smoothing_windows": [10, 3], "vertical_line": 0.9}, 
+    {"key": "eval/strong/win_rate", "metric_label": "Win Rate", "smoothing_windows": [10, 3], "vertical_line": 0.9}, 
     {"key": "charts/mean_episode_length", "metric_label": "Mean Episode Length", "smoothing_windows": [200, 100]},
 ]
 outpath = "plots/td3/no_self_play.pdf"
 
-plot(run_groups, metrics, outpath, max_steps=400_000, cell_width=2, cell_height=1.7)
+plot(run_groups, metrics, outpath, max_steps=400_000, cell_width=2, cell_height=1.3)

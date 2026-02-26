@@ -31,6 +31,8 @@ def plot(run_groups, metrics, outpath, max_steps=None, cmap=None, cell_width=4, 
         fig, axs = plt.subplots(n_metrics, n_groups, figsize=(n_groups*cell_width, n_metrics*cell_height))
         only_one_group = False
     
+    # only_one_group = only_one_group or n_metrics == 1
+
     cmap = plt.get_cmap("tab10") if cmap is None else cmap
 
     for group_idx, (group_name, runs) in enumerate(run_groups.items()):
@@ -43,7 +45,9 @@ def plot(run_groups, metrics, outpath, max_steps=None, cmap=None, cell_width=4, 
                 if max_steps is not None:
                     df = df[df["step"] <= max_steps]
 
-                if only_one_group:
+                if n_metrics == 1: 
+                    ax = axs[group_idx]
+                elif only_one_group:
                     ax = axs[metric_idx]
                 else:                
                     ax = axs[metric_idx, group_idx]

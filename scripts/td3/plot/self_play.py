@@ -21,7 +21,7 @@ run_groups = {
 
 metrics = [
     {"key": "eval/strong/win_rate", "metric_label": "Win Rate (Strong Opponent)", "smoothing_windows": [10, 3], "vertical_line": 0.9}, 
-    {"key": "charts/mean_episode_length", "metric_label": "Mean Episode Length", "smoothing_windows": [200, 100], "range": (0, 256)},
+    # {"key": "charts/mean_episode_length", "metric_label": "Mean Episode Length", "smoothing_windows": [200, 100], "range": (0, 256)},
     # {"key": "charts/intrinsic_reward", "metric_label": "Mean Intrinsic Reward", "smoothing_windows": [100, 10]},
     # {"key": "charts/extrinsic_reward", "metric_label": "Mean Extrinsic Reward", "smoothing_windows": [10, 3]},
 ]

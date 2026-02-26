@@ -11,12 +11,12 @@ import seaborn as sns
 import scripts.preamble
 
 run_groups = {
-    "Default": [
+    "GN": [
         ("td3:models/td3/HockeyOne-v0/final/sp/default/default_1_pr_0_sp_1__42__1772009398/1000000.model", "No PER"), 
         ("td3:models/td3/HockeyOne-v0/final/sp/default/default_1_pr_1_pr-intr-factor_0_sp_1__42__1772009398/1000000.model", "PER\n(TD-error)"), 
         ("td3:models/td3/HockeyOne-v0/final/sp/default/default_1_pr_1_pr-intr-factor_1_sp_1__42__1772009398/1000000.model", "PER\n(Intrinsic)"), 
     ], 
-    "Pink Noise": [
+    "PN": [
         ("td3:models/td3/HockeyOne-v0/final/sp/pn/pn_0x2_pr_0_sp_1__42__1772009398/1000000.model", "No PER"), 
         ("td3:models/td3/HockeyOne-v0/final/sp/pn/pn_0x2_pr_1_pr-intr-factor_0_sp_1__42__1772009398/1000000.model", "PER\n(TD-error)"), 
         ("td3:models/td3/HockeyOne-v0/final/sp/pn/pn_0x2_pr_1_pr-intr-factor_1_sp_1__42__1772009398/1000000.model", "PER\n(Intrinsic)"), 
@@ -25,7 +25,7 @@ run_groups = {
     #     ("sac:models/sac/sac_2_1_1000000_1771781495.pkl", "SAC"),
     #     ("crq:models/crossq/model.pkl", "CrossQ"), 
     # ],
-    "Intr. Rew.": [
+    "Intr.": [
         ("td3:models/td3/HockeyOne-v0/final/sp/rnd/rnd_0x5-1_pr_0_sp_1__42__1772009409/1000000.model", "No PER"), 
         # ("data/td3/HockeyOne-v0/final/sp/rnd/rnd_0x5-1_pr_1_pr-intr-factor_0_sp_1__42__1772009409", "PER\n(TD-error)"), 
         # ("data/td3/HockeyOne-v0/final/sp/rnd/rnd_0x5-1_pr_1_pr-intr-factor_1_sp_1__42__1772009409", "PER\n(Intrinsic)"), 
@@ -44,30 +44,38 @@ per_label_to_color = {
 n_eval_episodes = 1000
 
 player_paths = [model_path for group in run_groups.values() for model_path, _ in group]
-eval_run_names = [run_label for group in run_groups.values() for _, run_label in group]
-results = run_evaluation_multiple_runs(player_paths, n_episodes=n_eval_episodes, render=False, seed=42, hockey_mode=Mode.NORMAL)
 
-win_rates = []
-for player in player_paths: 
-    player_results = results[player]
-    def win_rate_for_opponent(opponent):
-        if opponent not in player_results:
-            return np.nan
-        else: 
-            return results[player][opponent]["win_rate"]
-    win_rates.append([win_rate_for_opponent(opponent) for opponent in player_paths])
+if not os.path.exists(path[:-3]  + "json"):
 
-win_rates = np.array(win_rates)
-win_rates *= 100 
-win_rates[np.diag_indices_from(win_rates)] = np.nan # hide out diagonal because playing against itself is not meaningful
+    eval_run_names = [run_label for group in run_groups.values() for _, run_label in group]
+    results = run_evaluation_multiple_runs(player_paths, n_episodes=n_eval_episodes, render=False, seed=42, hockey_mode=Mode.NORMAL)
 
-import json
-json.dump({
-    "win_rates": win_rates.tolist(),
-    "eval_run_names": eval_run_names,
-}, open(path[:-3] + "json", "w"))
+    win_rates = []
+    for player in player_paths: 
+        player_results = results[player]
+        def win_rate_for_opponent(opponent):
+            if opponent not in player_results:
+                return np.nan
+            else: 
+                return results[player][opponent]["win_rate"]
+        win_rates.append([win_rate_for_opponent(opponent) for opponent in player_paths])
 
-fig, axs = plt.subplots(1, 1, figsize=(3.5,3.5))
+    win_rates = np.array(win_rates)
+    win_rates *= 100 
+    win_rates[np.diag_indices_from(win_rates)] = np.nan # hide out diagonal because playing against itself is not meaningful
+
+    import json
+    json.dump({
+        "win_rates": win_rates.tolist(),
+        "eval_run_names": eval_run_names,
+    }, open(path[:-3] + "json", "w"))
+else: 
+    import json 
+    data = json.load(open(path[:-3] + "json"))
+    win_rates = np.array(data["win_rates"])
+    eval_run_names = data["eval_run_names"]
+
+fig, axs = plt.subplots(1, 1, figsize=(2.2,2.2))
 
 ax = axs
 
@@ -81,8 +89,8 @@ sns.heatmap(win_rates, cbar = False, annot=True, fmt=".0f", cmap=cmap, ax=ax, xt
 # ax.set_title("Win Rate (\%)")
 
 
-ax.spines['bottom'].set_position(('outward', 20))
-ax.spines['left'].set_position(('outward', 30))
+ax.spines['bottom'].set_position(('outward', 10))
+ax.spines['left'].set_position(('outward', 24))
 ax.tick_params(axis='both', which='both', length=0)
 
 for i, name in enumerate(eval_run_names):
@@ -91,6 +99,9 @@ for i, name in enumerate(eval_run_names):
     color = per_label_to_color[name]
     
     ax.get_xticklabels()[i].set_color(color)
+    ax.get_xticklabels()[i].set_fontweight("bold")
+    ax.get_xticklabels()[i].set_rotation(45)
+
     ax.get_yticklabels()[i].set_horizontalalignment("center")
     ax.get_yticklabels()[i].set_fontweight("bold")
     ax.get_yticklabels()[i].set_color(color)
@@ -101,10 +112,10 @@ group_lengths = [1.3, 1.3, 0.3]
 
 bottom_y = ax.get_ylim()[0] 
 for name, center, group_len in zip(group_names, group_centers, group_lengths):
-    ax.text(-0.3, center, name, rotation=90, va="center", ha="center", fontweight="normal", clip_on=False)
-    ax.plot([-0.6, -0.6], [center-group_len, center+group_len], color="black", lw=1, clip_on=False)
+    ax.text(-0.3, center, name, rotation=90, va="center", ha="center", fontweight="bold", clip_on=False)
+    ax.plot([-0.7, -0.7], [center-group_len, center+group_len], color="black", lw=1, clip_on=False)
 
-    ax.text(center, bottom_y+0.3 , name, va="center", ha="center", fontweight="normal", clip_on=False)
+    ax.text(center, bottom_y+0.3 , name, va="center", ha="center", fontweight="bold", clip_on=False)
     ax.plot([center-group_len, center+group_len], [bottom_y+0.6, bottom_y+0.6], color="black", lw=1, clip_on=False)
 
     # ax.text(center, bottom_y+2.4, name, va="center", ha="center", fontsize=11, fontweight="normal", clip_on=False)
