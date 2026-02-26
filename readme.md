@@ -17,6 +17,7 @@ Own modifications were marked with Notes whereever possible. The use of pink noi
 The implementation is based on CleanRL SAC implementation for continuous actions. We added colored noise for action exploration and Randomized Ensembled Double Q-Learning for a higher Update-to-data ratio.
 
 ## CrossQ
+The implementation is based on [CrossQ]{https://arxiv.org/abs/1902.05605}
 
 ## Ensemble
 
