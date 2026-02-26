@@ -1,4 +1,4 @@
-# docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/td3/#td3_continuous_actionpy
+# NOTE: Taken and adapted from https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/td3_continuous_action.py
 import os
 import random
 import time

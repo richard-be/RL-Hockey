@@ -17,8 +17,8 @@ def _evaluate_opponent_pool(
 ):
     actor.eval()
 
-    def run_episode(): 
-        obs, _ = env.reset(seed=seed)
+    def run_episode(i=0): 
+        obs, _ = env.reset(seed=seed+i)
         accum_reward = 0 
         episode_len = 0 
         done = False
@@ -49,7 +49,7 @@ def _evaluate_opponent_pool(
         episode_lengths = np.zeros(n_eval_episodes)
 
         for i in range(n_eval_episodes):
-            mean_reward, outcome, episode_len = run_episode()
+            mean_reward, outcome, episode_len = run_episode(i)
             rewards[i] = mean_reward
             outcomes[i] = outcome
             episode_lengths[i] = episode_len
@@ -84,10 +84,10 @@ def _set_seed(seed: int = 42):
     torch.manual_seed(seed)
     torch.backends.cudnn.deterministic = True 
 
-def setup_eval_env(hockey_mode, seed=42):
+def setup_eval_env(hockey_mode, seed=42, capture_video=False, run_name=None):
     # env setup
     player = HockeyPlayer(None, player_num=-1, player_name="player")
-    env = make_hockey_eval_env(seed, mode=hockey_mode)()
+    env = make_hockey_eval_env(seed, mode=hockey_mode, capture_video=capture_video, run_name=run_name)()
     env_unwrapped = env.unwrapped
     return player, env, env_unwrapped
 
@@ -106,10 +106,14 @@ def evaluate(
 ):
     eval_opponents = []
     if default_opponents:
-        eval_opponents.extend([
-            ("weak", HockeyPlayer(OpponentActor(weak=True), player_num=len(eval_opponents), player_name="Weak")),
-            ("strong", HockeyPlayer(OpponentActor(weak=False), player_num=len(eval_opponents)+1, player_name="Strong")),
-        ])
+        if isinstance(default_opponents, bool):
+            default_opponents = ["weak", "strong"]
+        else: 
+            assert isinstance(default_opponents, tuple) or isinstance(default_opponents, list)
+
+        for opponent_type in default_opponents:
+            eval_opponents.append((opponent_type, HockeyPlayer(OpponentActor(weak=opponent_type=="weak"), player_num=len(eval_opponents), player_name=opponent_type.capitalize())))
+                
 
     if is_self_play:
         assert unwrapped_train_envs is not None
@@ -143,9 +147,9 @@ def evaluate(
 
     return results
 
-def run_evaluation(player_path, n_episodes=10, render=True, seed=42, hockey_mode=Mode.NORMAL, use_default_opponents=True, custom_opponents=None, device = "cpu"):
+def run_evaluation(player_path, n_episodes=10, render=True, seed=42, hockey_mode=Mode.NORMAL, use_default_opponents=True, custom_opponents=None, device = "cpu", capture_video=False, run_name=None):
     _set_seed(seed) 
-    player, env, env_unwrapped = setup_eval_env(hockey_mode, seed)
+    player, env, env_unwrapped = setup_eval_env(hockey_mode, seed, capture_video=capture_video, run_name=run_name)
 
     actor = load_actor(player_path, env, device)
     player.actor = actor

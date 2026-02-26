@@ -57,7 +57,7 @@ class RenderWrapper(gym.Wrapper):
     def render(self, **kwargs): 
         return_val = self.env.render(mode=self.env.render_mode)
         
-        if self.has_opponent:
+        if self.has_opponent and self.env.screen is not None:
             opponent = self.env.opponent
             text_surface = self.font.render(f"Opponent {opponent.player_num}: {opponent.player_name}", False, (0, 0, 0))
             self.env.screen.blit(text_surface, (0, 0))
@@ -197,11 +197,11 @@ def make_hockey_env_self_play(seed, idx, capture_video, run_name, player: Hockey
     return thunk
 
 
-def make_hockey_eval_env(seed, idx=0, mode=Mode.NORMAL):
+def make_hockey_eval_env(seed, idx=0, mode=Mode.NORMAL, capture_video=False, run_name=None):
     def thunk():
         env = HockeyEnv_BasicOpponent(mode=mode)
         env.action_space.seed(seed)
-        return wrap_hockey_env(env, seed, idx, capture_video=False, run_name=None)
+        return wrap_hockey_env(env, seed, idx, capture_video=capture_video, run_name=run_name)
     return thunk
 
 def load_actor(run_name: str, env, device="cpu"):
