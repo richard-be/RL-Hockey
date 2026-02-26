@@ -60,10 +60,10 @@ class OpponentSampler():
     return opponent_id, opponent    
   
   def get_probs(self, global_episode):
-    if global_episode < 7e3:
+    """if global_episode < 7e3:
       probs = [0, 1, 0]
-    else:
-      probs = [0, 0.1, 0.9]
+    else:"""
+    probs = [0, 1, 0]
     return probs
          
   def add_opponent(self, actor, name):
