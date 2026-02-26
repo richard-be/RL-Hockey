@@ -1,0 +1,8 @@
+exp_name: final/sp/rnd/rnd_0x5-1_pr_0_sp_1
+
+rnd_int_coef: 0.5 
+rnd_ext_coef: 1
+is_self_play: true
+
+pr_enabled: false
+total_timesteps: 1_000_000

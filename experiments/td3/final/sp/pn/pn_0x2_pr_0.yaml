@@ -1,0 +1,11 @@
+exp_name: final/sp/pn/pn_0x2_pr_0_sp_1
+
+rnd_int_coef: 0 # disable intrinsic rewards, only use for prioritization
+rnd_ext_coef: 1
+is_self_play: true
+
+noise_type: "cn"
+noise_sigma: 0.2
+
+pr_enabled: false
+total_timesteps: 1_000_000

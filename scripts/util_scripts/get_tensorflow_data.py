@@ -35,24 +35,46 @@ def save_scalar_data(path, output_dir, skip_existing=True):
         df.to_csv(os.path.join(output_dir, filename), index=False)
 
 
-log_dir = "./runs/td3/HockeyOne-v0/"
-output_dir = "./data/td3/HockeyOne-v0/"
-skip_existing = False
+log_dir = "./runs/td3/HockeyOne-v0/final"
+output_dir = "./data/td3/HockeyOne-v0/final"
+skip_existing = True
 
+print("Listing", log_dir)
 for experiment in tqdm(os.listdir(log_dir)):
+    print("Experiment", experiment)
     if not os.path.isdir(os.path.join(log_dir, experiment)):
         continue
-
-    for run in os.listdir(os.path.join(log_dir, experiment)):
-        if not os.path.isdir(os.path.join(log_dir, experiment, run)):
+    
+    # current_dir_relative = experiment
+    # current_dir = os.path.join(log_dir, current_dir_relative)
+    experiment_dir_rel = experiment
+    experiment_dir = os.path.join(log_dir, experiment)
+    for subdir in os.listdir(experiment_dir):
+        # print("Subdir", subdir)
+        if not os.path.isdir(os.path.join(experiment_dir, subdir)):
             continue
+        
 
-        for file in os.listdir(os.path.join(log_dir, experiment, run)):
-            if file.startswith("events.out.tfevents"):
-                out_dir = os.path.join(output_dir, experiment, run)
-                os.makedirs(out_dir, exist_ok=True)
+        # current_dir_relative = os.path.join(current_dir_relative, subdir)
+        # current_dir = os.path.join(current_dir, subdir)
+        sub_dir_rel = os.path.join(experiment_dir_rel, subdir)
+        sub_dir = os.path.join(experiment_dir, subdir)
 
-                in_path = os.path.join(log_dir, experiment, run, file)
-                
-                save_scalar_data(in_path, out_dir, skip_existing)
+        for run in os.listdir(sub_dir):
+            # print("run", run)
+            if not os.path.isdir(os.path.join(sub_dir, run)):
+                continue
+
+            run_dir_rel = os.path.join(sub_dir_rel, run)
+            run_dir = os.path.join(sub_dir, run)
+
+            # print("Listing", run_dir)
+            for file in os.listdir(run_dir):
+                if file.startswith("events.out.tfevents"):
+                    out_dir = os.path.join(output_dir, run_dir_rel)
+                    os.makedirs(out_dir, exist_ok=True)
+
+                    in_path = os.path.join(run_dir, file)
+                    # print("Found", in_path)
+                    save_scalar_data(in_path, out_dir, skip_existing)
 print("Done.")

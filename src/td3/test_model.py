@@ -25,8 +25,11 @@ class Args:
     n_episodes: int = 10
     render: bool = True
 
-    default_opponents: bool = True
+    default_opponents = ("weak", "strong") #("weak", "strong")
     opponents: Optional[tuple] = ("") 
+
+    video: bool = False 
+
 
 def find_latest_time(pattern, root_dir): 
     import glob 
@@ -70,6 +73,8 @@ def main():
         hockey_mode=args.hockey_mode, 
         use_default_opponents=args.default_opponents,
         custom_opponents=opponents,
+        capture_video=args.video, 
+        run_name="eval_"+player_path.replace("/", ":").replace(".model", "") if args.video else None,
     )
 
     for opponent, stats in results.items():

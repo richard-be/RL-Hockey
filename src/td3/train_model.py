@@ -1,4 +1,4 @@
-# docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/td3/#td3_continuous_actionpy
+# NOTE: Taken and adapted from https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/td3_continuous_action.py
 import os
 import random
 import time
@@ -117,7 +117,7 @@ class Args:
     self_play_initial_opponents: tuple = (("weak", 1200), ("strong", 1500)) # can disable strong opponent in self-play mode to only use it as validation opponent
     self_play_additional_opponents: Optional[tuple] = None # list of ("<name>:<algorithm>:<path>", opponent_elo) to add to opponent pool 
     self_play_reuse_opponent_exp: bool = False # add opponent's transition experience to replay buffer to increase sample efficiency of self-play training
-
+    additional_eval_opponents: Optional[tuple] = None # list of ("<name>:<algorithm>:<path>", opponent_elo) to add to evaluation opponent pool (not trained against, just to evaluate generalization)
     # colored noise parameters
     noise_type: str = "normal" # "normal" or "cn" (colored noise)
     noise_beta: float = 1.0
@@ -279,8 +279,15 @@ def main():
                     env.add_actor_to_opponent_pool(opponent_actor, opponent_name, opponent_elo)
                 # also evaluate against these opponents
                 eval_custom_opponents.append((opponent_name, opponent_actor))
-                print("Added opponent to train pool:", opponent_name, opponent_elo)
+                print("Added opponent to train & eval pool:", opponent_name, opponent_elo)
         eval_player.actor = actor
+
+        # add additional opponents to evaluation opponent pool
+        for opponent_id in args.additional_eval_opponents or []:
+            opponent_name, opponent_path = opponent_id.split(":", 1)
+            opponent_actor = disable_gradients(load_actor(opponent_path, envs, device=device))
+            eval_custom_opponents.append((opponent_name, opponent_actor))
+            print("Added opponent to evaluation pool only:", opponent_name)
 
     # NOTE: added RND model and optimizer here
     # initialize model
@@ -322,12 +329,15 @@ def main():
 
         if n_eval_episodes > 0 and args.is_hockey: 
             # NOTE: changed evaluation
-            results = evaluate(eval_env, eval_env_unwrapped, n_eval_episodes, actor, is_self_play=args.is_self_play, unwrapped_train_envs=unwrapped_envs, device=device, custom_opponents=eval_custom_opponents, seed=args.seed)
+            actor.eval()
+            with torch.no_grad():
+                results = evaluate(eval_env, eval_env_unwrapped, n_eval_episodes, actor, is_self_play=args.is_self_play, unwrapped_train_envs=unwrapped_envs, device=device, custom_opponents=eval_custom_opponents, seed=args.seed)
             for opponent_name, stats in results.items():
                 writer.add_scalar(f"eval/{opponent_name}/acum_reward", stats["reward"], current_step)
                 writer.add_scalar(f"eval/{opponent_name}/lose_rate", stats["lose_rate"], current_step) 
                 writer.add_scalar(f"eval/{opponent_name}/win_rate", stats["win_rate"], current_step) 
                 writer.add_scalar(f"eval/{opponent_name}/draw_rate", stats["draw_rate"], current_step)
+            actor.train()
 
     # NOTE: moved RND normalization to separate function: 
     def normalize_obs(obs, eps=1e-8, clamp_range=(-5.0, 5.0)): 
@@ -406,6 +416,19 @@ def main():
             env_has_info = infos["_episode"]
             mean_episode_len = infos["episode"]['l'][env_has_info].mean()
             writer.add_scalar("charts/mean_episode_length", mean_episode_len, global_step)
+            mean_return = infos["episode"]["r"][env_has_info].mean()
+            writer.add_scalar("charts/mean_episode_return", mean_return, global_step)
+
+        if "winner" in infos:
+            outcome = infos["winner"][terminations]
+            n_won = (outcome == 1).sum()
+            n_lost = (outcome == -1).sum()
+            n_draw = (outcome == 0).sum()
+
+            writer.add_scalar("episode/n_won", n_won, global_step)
+            writer.add_scalar("episode/n_lost", n_lost, global_step)
+            writer.add_scalar("episode/n_draw", n_draw, global_step)
+            writer.add_scalar("episode/n_terms", len(outcome), global_step)
 
         # NOTE: added here for RND
         # First update obs running means
