@@ -5,6 +5,11 @@ This Repository contains code for the four models we implemented for the Reinfor
 The ensemble model combining TD3, SAC and CrossQ ranked 6th out of 178 participants.
 
 ## TD3
+The implementation is based on CleanRL's implementations of TD3, RND, and PER: 
+- TD3: https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/td3_continuous_action.py
+- RND: https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/ppo_rnd_envpool.py
+- PER: https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/rainbow_atari.py
+Own modifications were marked with Notes whereever possible. The use of pink noise was implemented by Richard Below. 
 
 ## SAC
 
@@ -15,7 +20,7 @@ The implementation is based on CleanRL SAC implementation for continuous actions
 ## Ensemble
 
 ## Folders
-**experiments** contains...
+**experiments** contains config files that define the different TD3 training configurations.
 
 **jobs** contains the batch files used for scheduling jobs on the cluster
 
