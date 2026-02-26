@@ -8,6 +8,8 @@ The ensemble model combining TD3, SAC and CrossQ ranked 6th out of 178 participa
 
 ## SAC
 
+The implementation is based on CleanRL SAC implementation for continuous actions. We added colored noise for action exploration and Randomized Ensembled Double Q-Learning for a higher Update-to-data ratio.
+
 ## CrossQ
 
 ## Ensemble
