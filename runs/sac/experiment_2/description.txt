@@ -1,1 +1,0 @@
-test colored noise and entropy combinations, with default rewards (win and one other)
